@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Submit an Idea — NSLS Solutions</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>body{visibility:hidden}</style>
+</head>
+<body>
+
+<header class="app-header">
+  <a href="index.html" class="logo">NSLS <span>Solutions</span></a>
+  <nav>
+    <a href="index.html">Triage</a>
+    <a href="intake.html" class="active">Submit Idea</a>
+    <a href="capacity.html">Capacity</a>
+    <a href="submit.html">Partner Form ↗</a>
+    <span style="display:flex;align-items:center;gap:12px;margin-left:16px;padding-left:16px;border-left:1px solid var(--border)">
+      <span id="auth-user" style="font-size:12px;color:var(--muted)"></span>
+      <a href="/api/auth/logout" style="font-size:12px;color:var(--muted);text-decoration:none">Sign out</a>
+    </span>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="public-form" id="form-wrap">
+    <div class="form-title">Submit an Idea</div>
+    <div class="form-subtitle">Share a pain point or win you'd like to see automated. We'll review and triage.</div>
+
+    <form id="intake-form" novalidate>
+      <div class="form-group">
+        <label for="idea">Idea title<span class="req">*</span></label>
+        <input type="text" id="idea" class="form-control" placeholder="e.g. Auto-send chapter health alerts to advisors" required/>
+        <div class="form-hint">A short headline — what does this do?</div>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description<span class="req">*</span></label>
+        <textarea id="description" class="form-control" rows="5" placeholder="Describe the problem or opportunity. What's painful today? What would success look like?" required></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="source">Your team</label>
+        <select id="source" class="form-control">
+          <option value="">— select your team —</option>
+          <option>CS team</option>
+          <option>MEX team</option>
+          <option>Product team</option>
+          <option>Sales team</option>
+          <option>Marketing team</option>
+          <option>Other employee</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="solution-type">Solution type</label>
+        <select id="solution-type" class="form-control">
+          <option value="">— select if known —</option>
+          <option>Customer-facing</option>
+          <option>Sales enablement</option>
+          <option>Internal ops / productivity</option>
+          <option>Product feature</option>
+          <option>Infrastructure</option>
+        </select>
+        <div class="form-hint">Not sure? Leave blank — Chris will categorize during triage.</div>
+      </div>
+
+      <div class="form-group">
+        <label>Affected teams</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="CS"/> CS</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="MEX"/> MEX</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="Sales"/> Sales</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="Marketing"/> Marketing</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="Product"/> Product</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="Engineering"/> Engineering</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="Finance"/> Finance</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="Org-wide"/> Org-wide</label>
+        </div>
+      </div>
+
+      <div class="section-label">Optional — helps with prioritization</div>
+
+      <div class="form-group">
+        <label for="reference-links">Reference links</label>
+        <textarea id="reference-links" class="form-control" rows="2" placeholder="Slack threads, Fathom recordings, Google Docs…"></textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label for="time-saved">Time saved (hrs/mo)</label>
+          <input type="number" id="time-saved" class="form-control" min="0" step="0.5" placeholder="e.g. 4"/>
+        </div>
+        <div class="form-group">
+          <label for="cost-savings">Cost savings ($/mo)</label>
+          <input type="number" id="cost-savings" class="form-control" min="0" placeholder="e.g. 500"/>
+        </div>
+        <div class="form-group">
+          <label for="revenue-impact">Revenue impact ($/mo)</label>
+          <input type="number" id="revenue-impact" class="form-control" min="0" placeholder="e.g. 1000"/>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="attachment">Attachments</label>
+        <input type="file" id="attachment" class="form-control" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" multiple/>
+        <div class="form-hint">Screenshots, documents, or other files — select multiple if needed (max 5 MB each)</div>
+      </div>
+
+      <div class="form-group">
+        <label for="urgency">Urgency / context</label>
+        <textarea id="urgency" class="form-control" rows="2" placeholder="Is there a deadline or dependency we should know about?"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="submitted-by">Your name</label>
+        <input type="text" id="submitted-by" class="form-control" placeholder="Your name"/>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px">
+        <a href="index.html" class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-primary" id="submit-btn">Submit idea</button>
+      </div>
+
+      <div id="form-error" style="color:var(--red);font-size:13px;margin-top:12px;display:none"></div>
+    </form>
+
+    <div class="success-state" id="success" style="display:none">
+      <div class="checkmark">✓</div>
+      <h2>Idea submitted</h2>
+      <p>We'll review it within a few days. You'll get a Slack DM when there's an update.</p>
+      <div style="margin-top:24px;display:flex;gap:10px;justify-content:center">
+        <a href="intake.html" class="btn btn-ghost">Submit another</a>
+        <a href="index.html" class="btn btn-primary">View triage queue</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('intake-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  const errEl = document.getElementById('form-error');
+  errEl.style.display = 'none';
+
+  const idea = document.getElementById('idea').value.trim();
+  const description = document.getElementById('description').value.trim();
+  if (!idea || !description) {
+    errEl.textContent = 'Idea title and description are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const affectedTeams = [...document.querySelectorAll('input[type="checkbox"]:checked')].map(c => c.value);
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  try {
+    const r = await fetch('/api/intake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idea,
+        description,
+        source: document.getElementById('source').value || undefined,
+        solution_type: document.getElementById('solution-type').value || undefined,
+        affected_teams: affectedTeams.length ? affectedTeams : undefined,
+        reference_links: document.getElementById('reference-links').value.trim() || undefined,
+        time_saved: document.getElementById('time-saved').value || undefined,
+        cost_savings: document.getElementById('cost-savings').value || undefined,
+        revenue_impact: document.getElementById('revenue-impact').value || undefined,
+        urgency_note: document.getElementById('urgency').value.trim() || undefined,
+        submitted_by_name: document.getElementById('submitted-by').value.trim() || undefined,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error?.message || data.error || JSON.stringify(data));
+
+    const files = [...document.getElementById('attachment').files];
+    if (files.length) {
+      btn.textContent = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`;
+      await Promise.all(files.map(file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async e => {
+          try {
+            await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recordId: data.id, filename: file.name, contentType: file.type, data: e.target.result.split(',')[1] }),
+            });
+            resolve();
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      })));
+    }
+
+    document.getElementById('intake-form').style.display = 'none';
+    document.getElementById('success').style.display = 'block';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Submit idea';
+  }
+});
+</script>
+<script>
+(async function() {
+  try {
+    const r = await fetch('/api/auth/session');
+    if (!r.ok) {
+      location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+      return;
+    }
+    const user = await r.json();
+    const el = document.getElementById('auth-user');
+    if (el) el.textContent = user.name || user.email;
+  } catch (e) {
+    // network failure — show page rather than hang
+  }
+  document.body.style.visibility = 'visible';
+})();
+</script>
+</body>
+</html>
