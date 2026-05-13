@@ -201,22 +201,21 @@ document.getElementById('intake-form').addEventListener('submit', async function
   if (selectedFiles.length) {
     btn.textContent = `Uploading ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}…`;
     try {
-      await Promise.all(selectedFiles.map(file => new Promise((resolve, reject) => {
+      // Read all files in parallel, then upload sequentially to avoid PATCH race condition
+      const fileData = await Promise.all(selectedFiles.map(file => new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = async e => {
-          try {
-            const up = await fetch('/api/upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recordId, filename: file.name, contentType: file.type, data: e.target.result.split(',')[1] }),
-            });
-            if (!up.ok) throw new Error('Upload failed');
-            resolve();
-          } catch (err) { reject(err); }
-        };
+        reader.onload = e => resolve({ name: file.name, type: file.type, data: e.target.result.split(',')[1] });
         reader.onerror = reject;
         reader.readAsDataURL(file);
       })));
+      for (const fd of fileData) {
+        const up = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordId, filename: fd.name, contentType: fd.type, data: fd.data }),
+        });
+        if (!up.ok) throw new Error('Upload failed');
+      }
     } catch {
       errEl.textContent = 'Idea saved, but file upload failed. Share files separately if needed.';
       errEl.style.display = 'block';

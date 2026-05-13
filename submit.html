@@ -145,22 +145,21 @@ document.getElementById('external-form').addEventListener('submit', async functi
     const files = [...document.getElementById('attachment').files];
     if (files.length) {
       btn.textContent = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`;
-      await Promise.all(files.map(file => new Promise((resolve, reject) => {
+      // Read all files in parallel, then upload sequentially to avoid PATCH race condition
+      const fileData = await Promise.all(files.map(file => new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = async e => {
-          try {
-            const up = await fetch('/api/upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recordId: data.id, filename: file.name, contentType: file.type, data: e.target.result.split(',')[1] }),
-            });
-            if (!up.ok) throw new Error('Upload failed');
-            resolve();
-          } catch (err) { reject(err); }
-        };
+        reader.onload = e => resolve({ name: file.name, type: file.type, data: e.target.result.split(',')[1] });
         reader.onerror = reject;
         reader.readAsDataURL(file);
       })));
+      for (const fd of fileData) {
+        const up = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordId: data.id, filename: fd.name, contentType: fd.type, data: fd.data }),
+        });
+        if (!up.ok) throw new Error('Upload failed');
+      }
     }
 
     document.getElementById('external-form').style.display = 'none';

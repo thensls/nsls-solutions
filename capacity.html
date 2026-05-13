@@ -96,8 +96,16 @@ function esc(s) {
 }
 
 async function load() {
-  const r = await fetch('/api/builders');
-  const data = await r.json();
+  const tableContainer = document.getElementById('builders-table');
+  let data;
+  try {
+    const r = await fetch('/api/builders');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+  } catch (e) {
+    tableContainer.innerHTML = `<div class="empty"><h3>Failed to load builders</h3><p>${esc(e.message)}</p></div>`;
+    return;
+  }
   builders = data.records || [];
 
   // Populate selector (listener registered once below)
@@ -110,7 +118,6 @@ async function load() {
   if (selectedId) sel.value = selectedId;
 
   // Table view
-  const tableContainer = document.getElementById('builders-table');
   if (builders.length === 0) {
     tableContainer.innerHTML = '<div class="empty"><h3>No builders found</h3></div>';
     return;
@@ -190,7 +197,7 @@ document.getElementById('builder-select').addEventListener('change', function() 
   document.getElementById('capacity-wrap').style.display = 'block';
 });
 
-load();
+
 </script>
 <script>
 (async function() {
@@ -204,8 +211,10 @@ load();
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
   } catch (e) {
-    // network failure — show page rather than hang
+    location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+    return;
   }
+  load();
   document.body.style.visibility = 'visible';
 })();
 </script>
