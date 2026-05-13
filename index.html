@@ -153,9 +153,9 @@ async function load() {
       const score = computeScore(f).toFixed(1);
       const submitter = f['Intake source'] === 'External form'
         ? (f['External submitter name'] || 'External') + (f['External submitter org'] ? ` · ${f['External submitter org']}` : '')
-        : (f['Submitted by'] ? 'Internal' : 'Internal');
+        : (f['Submitted by'] || 'Internal');
 
-      return `<tr onclick="navigate('${esc(rec.id)}')">
+      return `<tr onclick="navigate(this.dataset.id)" data-id="${esc(rec.id)}">
         <td>
           <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
           <div class="idea-submitter">${esc(submitter)}</div>
@@ -166,7 +166,7 @@ async function load() {
         <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
         <td><span class="score-chip">${score}</span></td>
         <td onclick="event.stopPropagation()">
-          <button onclick="deleteIdea('${esc(rec.id)}', this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="Delete">×</button>
+          <button onclick="deleteIdea(this.closest('tr').dataset.id, this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="Delete">×</button>
         </td>
       </tr>`;
     }).join('');

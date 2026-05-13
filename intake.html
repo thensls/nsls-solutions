@@ -239,7 +239,8 @@ document.getElementById('intake-form').addEventListener('submit', async function
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
   } catch (e) {
-    // network failure — show page rather than hang
+    location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+    return;
   }
   document.body.style.visibility = 'visible';
 })();

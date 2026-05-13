@@ -102,10 +102,11 @@ async function load() {
 
   // Populate selector (listener registered once below)
   const sel = document.getElementById('builder-select');
-  sel.innerHTML = '<option value="">— select your name —</option>';
+  let opts = '<option value="">— select your name —</option>';
   builders.forEach(b => {
-    sel.innerHTML += `<option value="${esc(b.id)}">${esc(b.fields.Name||'Unknown')}</option>`;
+    opts += `<option value="${esc(b.id)}">${esc(b.fields.Name||'Unknown')}</option>`;
   });
+  sel.innerHTML = opts;
   if (selectedId) sel.value = selectedId;
 
   // Table view

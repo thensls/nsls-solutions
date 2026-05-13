@@ -26,6 +26,7 @@ module.exports = async function handler(req, res) {
 
     // Fetch existing attachments so we append rather than overwrite
     const getRes = await fetch(recordUrl, { headers: airtableHeaders });
+    if (!getRes.ok) return res.status(502).json({ error: 'Failed to fetch existing record attachments' });
     const existing = await getRes.json();
     const existingAttachments = (existing.fields?.Attachments || []).map(a => ({ url: a.url }));
 
