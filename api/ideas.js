@@ -6,9 +6,13 @@ module.exports = async function handler(req, res) {
 
   const { status, source, limit = '200', offset } = req.query;
 
+  function escAirtable(s) {
+    return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
   const filters = [];
-  if (status) filters.push(`{Status} = "${status}"`);
-  if (source) filters.push(`{Intake source} = "${source}"`);
+  if (status) filters.push(`{Status} = "${escAirtable(status)}"`);
+  if (source) filters.push(`{Intake source} = "${escAirtable(source)}"`);
 
   const params = new URLSearchParams();
   if (filters.length === 1) params.set('filterByFormula', filters[0]);

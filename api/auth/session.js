@@ -10,11 +10,14 @@ function parseCookies(req) {
 }
 
 module.exports = async function handler(req, res) {
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) return res.status(500).json({ error: 'Server misconfiguration' });
+
   const token = parseCookies(req)['nsls_session'];
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
 
   try {
-    const secret = new TextEncoder().encode(process.env.SESSION_SECRET);
+    const secret = new TextEncoder().encode(sessionSecret);
     const { payload } = await jwtVerify(token, secret);
     res.json({ sub: payload.sub, email: payload.email, name: payload.name });
   } catch {

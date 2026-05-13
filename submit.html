@@ -149,11 +149,12 @@ document.getElementById('external-form').addEventListener('submit', async functi
         const reader = new FileReader();
         reader.onload = async e => {
           try {
-            await fetch('/api/upload', {
+            const up = await fetch('/api/upload', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ recordId: data.id, filename: file.name, contentType: file.type, data: e.target.result.split(',')[1] }),
             });
+            if (!up.ok) throw new Error('Upload failed');
             resolve();
           } catch (err) { reject(err); }
         };

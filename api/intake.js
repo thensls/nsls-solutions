@@ -30,10 +30,14 @@ module.exports = async function handler(req, res) {
   if (solution_type) fields['Solution type'] = solution_type;
   if (affected_teams?.length) fields['Affected teams'] = affected_teams;
   if (reference_links) fields['Reference links'] = reference_links;
-  if (time_saved != null && time_saved !== '') fields['Time saved'] = parseFloat(time_saved);
-  if (cost_savings != null && cost_savings !== '') fields['Cost savings'] = parseInt(cost_savings);
-  if (revenue_impact != null && revenue_impact !== '') fields['Revenue impact'] = parseInt(revenue_impact);
+  const ts = parseFloat(time_saved);
+  const cs = parseInt(cost_savings);
+  const ri = parseInt(revenue_impact);
+  if (time_saved != null && time_saved !== '' && !isNaN(ts)) fields['Time saved'] = ts;
+  if (cost_savings != null && cost_savings !== '' && !isNaN(cs)) fields['Cost savings'] = cs;
+  if (revenue_impact != null && revenue_impact !== '' && !isNaN(ri)) fields['Revenue impact'] = ri;
   if (urgency_note) fields['Notes'] = urgency_note;
+  if (submitted_by_name) fields['Submitted by'] = submitted_by_name;
 
   try {
     const r = await fetch(

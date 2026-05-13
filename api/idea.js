@@ -5,7 +5,7 @@ module.exports = async function handler(req, res) {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Missing id' });
 
-  const url = `https://api.airtable.com/v0/${BASE}/${encodeURIComponent(TABLE)}/${id}`;
+  const url = `https://api.airtable.com/v0/${BASE}/${encodeURIComponent(TABLE)}/${encodeURIComponent(id)}`;
   const headers = {
     Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`,
     'Content-Type': 'application/json',

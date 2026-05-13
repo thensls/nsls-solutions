@@ -73,13 +73,13 @@ function statusBadge(status) {
     'Archived': 'archived', "Won't do": 'wontdo', 'Picked up': 'building',
   };
   const cls = map[status] || 'parked';
-  return `<span class="badge badge-${cls}">${status || '—'}</span>`;
+  return `<span class="badge badge-${cls}">${esc(status || '—')}</span>`;
 }
 
 function sourceBadge(src) {
   if (src === 'External form') return '<span class="badge badge-external">External</span>';
   if (src === 'Internal form') return '<span class="badge badge-internal">Internal</span>';
-  return `<span class="badge" style="background:#F3F4F6;color:#374151">${src || 'Manual'}</span>`;
+  return `<span class="badge" style="background:#F3F4F6;color:#374151">${esc(src || 'Manual')}</span>`;
 }
 
 function relativeDate(iso) {
@@ -122,11 +122,10 @@ async function load() {
 
   try {
     const r = await fetch(url);
+    if (!r.ok) throw new Error(`API error ${r.status}`);
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'API error');
 
     const records = data.records || [];
-    const triageRecords = records.filter(r => r.fields['Status'] === 'Triage' || !status);
     const external = records.filter(r => r.fields['Intake source'] === 'External form');
     const needsResponse = records.filter(r => {
       const f = r.fields;
@@ -156,7 +155,7 @@ async function load() {
         ? (f['External submitter name'] || 'External') + (f['External submitter org'] ? ` · ${f['External submitter org']}` : '')
         : (f['Submitted by'] ? 'Internal' : 'Internal');
 
-      return `<tr onclick="navigate('${rec.id}')">
+      return `<tr onclick="navigate('${esc(rec.id)}')">
         <td>
           <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
           <div class="idea-submitter">${esc(submitter)}</div>
@@ -167,7 +166,7 @@ async function load() {
         <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
         <td><span class="score-chip">${score}</span></td>
         <td onclick="event.stopPropagation()">
-          <button onclick="deleteIdea('${rec.id}', this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="Delete">×</button>
+          <button onclick="deleteIdea('${esc(rec.id)}', this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="Delete">×</button>
         </td>
       </tr>`;
     }).join('');
@@ -223,8 +222,7 @@ function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-document.getElementById('filter-status').addEventListener('change', load);
-load();
+
 </script>
 <script>
 (async function() {
@@ -240,6 +238,8 @@ load();
   } catch (e) {
     // network failure — show page rather than hang
   }
+  document.getElementById('filter-status').addEventListener('change', load);
+  load();
   document.body.style.visibility = 'visible';
 })();
 </script>

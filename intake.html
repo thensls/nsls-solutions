@@ -155,9 +155,19 @@ document.getElementById('intake-form').addEventListener('submit', async function
 
   const affectedTeams = [...document.querySelectorAll('input[type="checkbox"]:checked')].map(c => c.value);
 
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  const selectedFiles = [...document.getElementById('attachment').files];
+  const oversized = selectedFiles.filter(f => f.size > MAX_FILE_SIZE);
+  if (oversized.length) {
+    errEl.textContent = `File${oversized.length > 1 ? 's' : ''} exceed 5 MB limit: ${oversized.map(f => f.name).join(', ')}`;
+    errEl.style.display = 'block';
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = 'Submitting…';
 
+  let recordId;
   try {
     const r = await fetch('/api/intake', {
       method: 'POST',
@@ -178,35 +188,43 @@ document.getElementById('intake-form').addEventListener('submit', async function
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error?.message || data.error || JSON.stringify(data));
+    recordId = data.id;
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Submit idea';
+    return;
+  }
 
-    const files = [...document.getElementById('attachment').files];
-    if (files.length) {
-      btn.textContent = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`;
-      await Promise.all(files.map(file => new Promise((resolve, reject) => {
+  // Record created — don't re-enable the submit button from this point on
+  if (selectedFiles.length) {
+    btn.textContent = `Uploading ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}…`;
+    try {
+      await Promise.all(selectedFiles.map(file => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = async e => {
           try {
-            await fetch('/api/upload', {
+            const up = await fetch('/api/upload', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recordId: data.id, filename: file.name, contentType: file.type, data: e.target.result.split(',')[1] }),
+              body: JSON.stringify({ recordId, filename: file.name, contentType: file.type, data: e.target.result.split(',')[1] }),
             });
+            if (!up.ok) throw new Error('Upload failed');
             resolve();
           } catch (err) { reject(err); }
         };
         reader.onerror = reject;
         reader.readAsDataURL(file);
       })));
+    } catch {
+      errEl.textContent = 'Idea saved, but file upload failed. Share files separately if needed.';
+      errEl.style.display = 'block';
     }
-
-    document.getElementById('intake-form').style.display = 'none';
-    document.getElementById('success').style.display = 'block';
-  } catch (err) {
-    errEl.textContent = err.message;
-    errEl.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Submit idea';
   }
+
+  document.getElementById('intake-form').style.display = 'none';
+  document.getElementById('success').style.display = 'block';
 });
 </script>
 <script>

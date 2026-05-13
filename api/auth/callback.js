@@ -49,6 +49,9 @@ module.exports = async function handler(req, res) {
       code_verifier: saved.verifier,
     }),
   });
+  if (!tokenRes.ok) {
+    return res.redirect(302, `/?auth_error=${encodeURIComponent('Token exchange failed')}`);
+  }
   const tokens = await tokenRes.json();
 
   if (tokens.error) {
@@ -72,7 +75,9 @@ module.exports = async function handler(req, res) {
     return res.status(400).send('Nonce mismatch — possible replay attack');
   }
 
-  const secret = new TextEncoder().encode(process.env.SESSION_SECRET);
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) return res.status(500).send('Server misconfiguration');
+  const secret = new TextEncoder().encode(sessionSecret);
   const sessionToken = await new SignJWT({
     sub: claims.sub,
     email: claims.email || '',

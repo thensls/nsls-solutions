@@ -11,6 +11,12 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'Missing recordId, filename, or data' });
   }
 
+  const recordUrl = `https://api.airtable.com/v0/${BASE}/${encodeURIComponent(TABLE)}/${encodeURIComponent(recordId)}`;
+  const airtableHeaders = {
+    Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+
   try {
     const buffer = Buffer.from(data, 'base64');
     const blob = await put(`submissions/${recordId}/${filename}`, buffer, {
@@ -18,19 +24,18 @@ module.exports = async function handler(req, res) {
       contentType: contentType || 'application/octet-stream',
     });
 
-    const patchRes = await fetch(
-      `https://api.airtable.com/v0/${BASE}/${encodeURIComponent(TABLE)}/${recordId}`,
-      {
+    // Fetch existing attachments so we append rather than overwrite
+    const getRes = await fetch(recordUrl, { headers: airtableHeaders });
+    const existing = await getRes.json();
+    const existingAttachments = (existing.fields?.Attachments || []).map(a => ({ url: a.url }));
+
+    const patchRes = await fetch(recordUrl, {
         method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: airtableHeaders,
         body: JSON.stringify({
-          fields: { Attachments: [{ url: blob.url, filename }] },
+          fields: { Attachments: [...existingAttachments, { url: blob.url, filename }] },
         }),
-      }
-    );
+      });
 
     const result = await patchRes.json();
     res.status(patchRes.status).json(result);
