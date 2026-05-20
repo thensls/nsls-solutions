@@ -1,8 +1,12 @@
+const { requireUser } = require('./_auth');
+const { notifyNewIdea } = require('./_notify');
+
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Ideas';
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireUser(req, res))) return;
 
   const {
     idea, description, source, solution_type, affected_teams,
@@ -52,6 +56,9 @@ module.exports = async function handler(req, res) {
       }
     );
     const data = await r.json();
+    if (r.ok && data?.id) {
+      await notifyNewIdea({ recordId: data.id, fields, kind: 'internal' });
+    }
     res.status(r.status).json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });

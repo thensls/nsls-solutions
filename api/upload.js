@@ -1,10 +1,12 @@
 const { put } = require('@vercel/blob');
+const { requireUser } = require('./_auth');
 
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Ideas';
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireUser(req, res))) return;
 
   const { recordId, filename, contentType, data } = req.body;
   if (!recordId || !data || !filename) {

@@ -225,6 +225,7 @@ function esc(str) {
 
 </script>
 <script>
+const ADMIN_EMAILS = ['chigbee@nsls.org'];
 (async function() {
   try {
     const r = await fetch('/api/auth/session');
@@ -233,6 +234,10 @@ function esc(str) {
       return;
     }
     const user = await r.json();
+    if (!ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
+      location.replace('/intake.html');
+      return;
+    }
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
   } catch (e) {

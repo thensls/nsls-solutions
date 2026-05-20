@@ -1,3 +1,5 @@
+const { notifyNewIdea } = require('./_notify');
+
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Ideas';
 
@@ -53,6 +55,9 @@ module.exports = async function handler(req, res) {
       }
     );
     const data = await r.json();
+    if (r.ok && data?.id) {
+      await notifyNewIdea({ recordId: data.id, fields, kind: 'external' });
+    }
     res.status(r.status).json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
