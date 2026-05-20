@@ -122,6 +122,7 @@ table.data-table tbody tr:hover { background: #F9FAFB; }
 table.data-table tbody td { padding: 12px 16px; vertical-align: top; }
 table.data-table .idea-title { font-weight: 500; }
 table.data-table .idea-submitter { color: var(--muted); font-size: 12px; margin-top: 2px; }
+table.data-table .idea-description-preview { color: var(--text); font-size: 12px; margin-top: 6px; line-height: 1.4; max-width: 520px; }
 table.data-table .date-cell { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 /* Stat bar */
