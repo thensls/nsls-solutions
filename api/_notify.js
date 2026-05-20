@@ -17,7 +17,9 @@ async function notifyNewIdea({ recordId, fields, kind }) {
   const source = fields['Intake source'] || '';
   const submitter = kind === 'external'
     ? `${fields['External submitter name'] || '?'} (${fields['External submitter email'] || '?'}) — ${fields['External submitter org'] || '?'}`
-    : (fields['Submitted by'] || 'Unknown');
+    : (fields['Internal submitter name']
+        ? `${fields['Internal submitter name']}${fields['Internal submitter email'] ? ` (${fields['Internal submitter email']})` : ''}`
+        : 'Unknown');
 
   const meta = [
     fields['Source'] && `Team: ${fields['Source']}`,
