@@ -199,7 +199,7 @@ function navigate(id) {
 
 async function deleteIdea(id, btn) {
   const title = btn.closest('tr')?.querySelector('.idea-title')?.textContent?.trim() || 'this idea';
-  const msg = `Permanently delete "${title}" from the shared Airtable base?\n\nThis removes the record from Kevin's base for everyone — not just hidden here. Only a full-table snapshot rollback (within 7 days) could bring it back.\n\nType DELETE to confirm:`;
+  const msg = `Permanently delete "${title}" from the NSLS Solutions Airtable base?\n\nThis removes the record from the shared base for everyone — not just hidden here. Only a full-table snapshot rollback (within 7 days) could bring it back.\n\nType DELETE to confirm:`;
   const confirmation = prompt(msg);
   if (confirmation !== 'DELETE') return;
   btn.disabled = true;
