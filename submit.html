@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Share an Idea — NSLS</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body { background: #F3F4F6; }
+    .public-header {
+      background: var(--navy);
+      color: white;
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+    }
+    .public-header .logo { font-weight: 700; font-size: 15px; color: white; }
+    .public-header .logo span { color: #F9A87A; }
+  </style>
+</head>
+<body>
+
+<div class="public-header">
+  <div class="logo">NSLS <span>Solutions</span></div>
+</div>
+
+<div class="container">
+  <div class="public-form" id="form-wrap">
+    <div class="form-title">Share an Idea with NSLS</div>
+    <div class="form-subtitle">Have an idea for how NSLS could better serve your school? We read every submission. You'll hear back within 5 business days.</div>
+
+    <form id="external-form" novalidate>
+      <div class="section-label" style="border-top:none;padding-top:0;margin-top:0">About you</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label for="name">Your name<span class="req">*</span></label>
+          <input type="text" id="name" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label for="email">Email address<span class="req">*</span></label>
+          <input type="email" id="email" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label for="org">School or organization<span class="req">*</span></label>
+          <input type="text" id="org" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label for="role">Your role<span class="req">*</span></label>
+          <input type="text" id="role" class="form-control" placeholder="e.g. Chapter Advisor, Dean of Students" required/>
+        </div>
+      </div>
+
+      <div class="section-label">Your idea</div>
+
+      <div class="form-group">
+        <label for="idea">Idea title<span class="req">*</span></label>
+        <input type="text" id="idea" class="form-control" placeholder="A short headline describing the idea" required/>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Description<span class="req">*</span></label>
+        <textarea id="description" class="form-control" rows="6" placeholder="What problem would this solve? What does success look like for you and your students?" required></textarea>
+      </div>
+
+      <div class="section-label">Optional</div>
+
+      <div class="form-group">
+        <label for="nsls-contact">Your NSLS contact</label>
+        <input type="text" id="nsls-contact" class="form-control" placeholder="Name of your CSR or account manager, if known"/>
+      </div>
+
+      <div class="form-group">
+        <label for="reference-links">Reference links</label>
+        <textarea id="reference-links" class="form-control" rows="2" placeholder="Google Drive, Loom, Figma, or other links relevant to your idea"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="attachment">Attachment</label>
+        <input type="file" id="attachment" class="form-control" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" multiple/>
+        <div class="form-hint">Screenshots, documents, or other files — select multiple if needed (max 5 MB each)</div>
+      </div>
+
+      <div class="form-group">
+        <label for="urgency">Urgency or context</label>
+        <textarea id="urgency" class="form-control" rows="2" placeholder="Any timing, dependencies, or context we should know about?"></textarea>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:24px">
+        <button type="submit" class="btn btn-primary" id="submit-btn" style="min-width:140px">Submit idea</button>
+      </div>
+
+      <div id="form-error" style="color:var(--red);font-size:13px;margin-top:12px;display:none"></div>
+    </form>
+
+    <div class="success-state" id="success" style="display:none">
+      <div class="checkmark">✓</div>
+      <h2>Thanks for sharing!</h2>
+      <p>We received your idea and will follow up at <strong id="confirm-email"></strong> within 5 business days.</p>
+      <div style="margin-top:24px">
+        <a href="submit.html" class="btn btn-ghost">Submit another idea</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('external-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  const errEl = document.getElementById('form-error');
+  errEl.style.display = 'none';
+
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const org = document.getElementById('org').value.trim();
+  const role = document.getElementById('role').value.trim();
+  const idea = document.getElementById('idea').value.trim();
+  const description = document.getElementById('description').value.trim();
+
+  if (!name || !email || !org || !role || !idea || !description) {
+    errEl.textContent = 'Please fill in all required fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errEl.textContent = 'Please enter a valid email address.';
+    errEl.style.display = 'block';
+    document.getElementById('email').focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  try {
+    const r = await fetch('/api/external', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name, email, org, role, idea, description,
+        nsls_contact: document.getElementById('nsls-contact').value.trim() || undefined,
+        reference_links: document.getElementById('reference-links').value.trim() || undefined,
+        urgency: document.getElementById('urgency').value.trim() || undefined,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error?.message || data.error || JSON.stringify(data));
+
+    const files = [...document.getElementById('attachment').files];
+    if (files.length) {
+      btn.textContent = `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…`;
+      // Read all files in parallel, then upload sequentially to avoid PATCH race condition
+      const fileData = await Promise.all(files.map(file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve({ name: file.name, type: file.type, data: e.target.result.split(',')[1] });
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      })));
+      for (const fd of fileData) {
+        const up = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordId: data.id, filename: fd.name, contentType: fd.type, data: fd.data }),
+        });
+        if (!up.ok) throw new Error('Upload failed');
+      }
+    }
+
+    document.getElementById('external-form').style.display = 'none';
+    document.getElementById('confirm-email').textContent = email;
+    document.getElementById('success').style.display = 'block';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Submit idea';
+  }
+});
+</script>
+</body>
+</html>

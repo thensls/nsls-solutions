@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Triage — NSLS Solutions</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    body { overflow: hidden; visibility: hidden; }
+    .triage-wrap { padding: 12px 16px; height: calc(100vh - 52px - 56px); }
+    .triage-layout { height: 100%; }
+    .col-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--muted); margin-bottom: 12px;
+    }
+    .idea-heading { font-size: 18px; font-weight: 700; line-height: 1.3; }
+    .description-text { font-size: 13px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+    .ref-link { font-size: 12px; color: var(--blue); word-break: break-all; }
+    .triage-col textarea {
+      width: 100%; border: 1px solid var(--border); border-radius: 7px;
+      padding: 8px 10px; font-size: 13px; font-family: inherit;
+      resize: none; min-height: 100px; outline: none;
+    }
+    .triage-col textarea:focus { border-color: var(--navy); }
+    .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .suggested-builder-row { display: flex; gap: 8px; align-items: flex-end; }
+    .suggested-builder-row select { flex: 1; }
+    .triage-col .inline-group { grid-template-columns: 1fr; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <a href="index.html" class="logo">NSLS <span>Solutions</span></a>
+  <nav>
+    <a href="index.html">Triage</a>
+    <a href="intake.html">Submit Idea</a>
+    <a href="capacity.html">Capacity</a>
+    <a href="submit.html">Partner Form ↗</a>
+    <span style="display:flex;align-items:center;gap:12px;margin-left:16px;padding-left:16px;border-left:1px solid var(--border)">
+      <span id="auth-user" style="font-size:12px;color:var(--muted)"></span>
+      <a href="/api/auth/logout" style="font-size:12px;color:var(--muted);text-decoration:none">Sign out</a>
+    </span>
+  </nav>
+</header>
+
+<div class="triage-wrap">
+  <div class="triage-layout" id="layout">
+    <div class="loading" style="grid-column:1/-1;align-self:center;text-align:center">Loading…</div>
+  </div>
+</div>
+
+<div class="action-bar">
+  <a href="index.html" class="btn btn-ghost btn-sm">← Queue</a>
+  <button class="btn btn-ghost btn-sm" id="btn-prev" disabled>‹ Prev</button>
+  <button class="btn btn-ghost btn-sm" id="btn-next" disabled>Next ›</button>
+  <span class="nav-info" id="nav-info"></span>
+  <div class="spacer"></div>
+  <button class="btn btn-ghost" id="btn-save-silent" disabled>Save without notifying</button>
+  <button class="btn btn-primary" id="btn-save" disabled>Save &amp; send notification</button>
+  <button class="btn btn-primary" id="btn-save-next" disabled>Save &amp; next →</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const recordId = params.get('id');
+let record = null;
+let builders = [];
+let queue = JSON.parse(sessionStorage.getItem('triageQueue') || '[]');
+let queueIdx = -1;
+
+const EFFORT_WEIGHT = {'XS (<2hr)':1,'S (half day)':2,'M (1-2 days)':4,'L (week+)':8,'XL (real project)':16};
+const SCHOOLS_QUAL = {'All':5,'Many':3,'Specific cohort':2,'Single school':1};
+
+const NOTIF_TEMPLATES = {
+  'Acknowledged': "Thanks — we got your request. Someone will review it within 5 business days.",
+  'In review': "Reviewing your request now, will follow up shortly.",
+  'In backlog': "Adding to our prioritization queue. We'll update you if/when it gets picked up.",
+  'Routed to product team': "This is a great fit for our team — I've handed it to them. They'll evaluate based on their roadmap and reach out if needed.",
+  'Building': "Good news — we're building this. Expected timeline: [X].",
+  'Shipped': "It's live! Here's how to access: [link].",
+  'Declined': "After review, this isn't something we're going to take on. [Reason]. Thanks for raising it.",
+  'Needs more info': "[Specific question]",
+};
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function computeScore(f) {
+  const ew = EFFORT_WEIGHT[f['Effort']] || 1;
+  const ch = parseInt(f['Chapter health impact']||'0')||0;
+  const sf = parseInt(f['Strategic fit']||'0')||0;
+  const ts = f['Time saved']||0;
+  const cs = f['Cost savings']||0;
+  const ri = f['Revenue impact']||0;
+  const sq = SCHOOLS_QUAL[f['Schools affected (qualitative)']]||0;
+  return ((ch*3)+(sf*2)+(ts/10)+(cs/500)+(ri/1000)+sq)/ew;
+}
+
+function selectOptions(opts, current, placeholder) {
+  let html = `<option value="">${placeholder || '— select —'}</option>`;
+  opts.forEach(o => {
+    html += `<option value="${esc(o)}"${current===o?' selected':''}>${esc(o)}</option>`;
+  });
+  return html;
+}
+
+function multiSelectCheckboxes(name, opts, current=[]) {
+  return opts.map(o => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+      <input type="checkbox" name="${name}" value="${esc(o)}"${current.includes(o)?' checked':''}/>
+      ${esc(o)}
+    </label>`).join('');
+}
+
+function renderSubmitterCard(f) {
+  const isExt = f['Intake source'] === 'External form';
+  if (isExt) {
+    return `<div class="submitter-card">
+      <div class="name">${esc(f['External submitter name']||'Unknown')}</div>
+      <div class="meta">${esc(f['External submitter role']||'')}${f['External submitter org']?` · ${esc(f['External submitter org'])}`:''}
+        ${f['External submitter email']?`<br><a href="mailto:${esc(f['External submitter email'])}" style="color:var(--blue)">${esc(f['External submitter email'])}</a>`:''}</div>
+      ${f['Related NSLS contact']?`<div class="meta" style="margin-top:6px">NSLS contact: ${esc(f['Related NSLS contact'])}</div>`:''}
+    </div>`;
+  }
+  return `<div class="submitter-card">
+    <div class="name">Internal Submission</div>
+    <div class="meta">${f['Submitted on']?new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):''}</div>
+  </div>`;
+}
+
+function renderLayout(f) {
+  const score = computeScore(f).toFixed(1);
+  const submitterStatus = f['Submitter status'] || 'Acknowledged';
+  const template = NOTIF_TEMPLATES[submitterStatus] || '';
+  const decision = f['Decision'] || '';
+
+  document.getElementById('layout').innerHTML = `
+    <!-- LEFT: Raw input -->
+    <div class="triage-col">
+      <div class="col-label">Submission</div>
+      ${renderSubmitterCard(f)}
+      <div>
+        <div class="idea-heading">${esc(f['Idea']||'Untitled')}</div>
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+          <span class="badge badge-${(f['Intake source']==='External form'?'external':'internal')}">${esc(f['Intake source']||'Manual')}</span>
+          <span style="font-size:12px;color:var(--muted)">${f['Submitted on']?new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}</span>
+          <span class="score-chip">${score}</span>
+        </div>
+      </div>
+      <div class="field-row">
+        <span class="field-label">Description</span>
+        <div class="description-text">${esc(f['Description']||'—')}</div>
+      </div>
+      ${f['Reference links']?`<div class="field-row">
+        <span class="field-label">Reference links</span>
+        <div>${f['Reference links'].split(/\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+          const isUrl = /^https?:\/\//.test(l);
+          return isUrl
+            ? `<a href="${esc(l)}" target="_blank" rel="noopener" class="ref-link" style="display:block">${esc(l)}</a>`
+            : `<span class="ref-link" style="display:block">${esc(l)}</span>`;
+        }).join('')}</div>
+      </div>`:''}
+      ${f['Attachments']&&f['Attachments'].length?`<div class="field-row">
+        <span class="field-label">Attachments</span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${f['Attachments'].map(a=>{
+          const isImg = a.type&&a.type.startsWith('image/');
+          const thumb = isImg&&a.thumbnails&&a.thumbnails.large ? a.thumbnails.large.url : null;
+          return thumb
+            ? `<a href="${esc(a.url)}" target="_blank" rel="noopener" title="${esc(a.filename)}" style="display:block;border-radius:6px;overflow:hidden;border:1px solid var(--border)"><img src="${esc(thumb)}" style="max-width:160px;max-height:120px;display:block"/></a>`
+            : `<a href="${esc(a.url)}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--blue);padding:6px 10px;border:1px solid var(--border);border-radius:6px">📎 ${esc(a.filename)}</a>`;
+        }).join('')}</div>
+      </div>`:''}
+      ${f['Notes']?`<div class="field-row">
+        <span class="field-label">Urgency / context</span>
+        <div class="description-text" style="color:var(--yellow)">${esc(f['Notes'])}</div>
+      </div>`:''}
+    </div>
+
+    <!-- CENTER: Analysis space -->
+    <div class="triage-col">
+      <div class="col-label">Analysis</div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label>Triage notes <span style="font-size:11px;color:var(--muted);font-weight:400">(private)</span></label>
+        <textarea id="f-triage-notes" rows="5">${esc(f['Triage notes']||'')}</textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label>Clarifying questions</label>
+        <textarea id="f-clarifying-questions" rows="3">${esc(f['Clarifying questions']||'')}</textarea>
+        <div style="margin-top:6px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted)">Clarification status</label>
+          <select id="f-clarification-status" class="form-control" style="margin-top:4px">
+            ${selectOptions(['None needed','Asked','Got response','Stuck waiting'], f['Clarification status'])}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Submitter message</label>
+        <div style="margin-bottom:6px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted)">Submitter status</label>
+          <select id="f-submitter-status" class="form-control" style="margin-top:4px">
+            ${selectOptions(['Acknowledged','In review','In backlog','Routed to product team','Building','Shipped','Declined','Needs more info'], submitterStatus)}
+          </select>
+        </div>
+        <div class="message-preview">
+          <div class="preview-label">Message preview</div>
+          <textarea id="f-last-message" rows="3">${esc(f['Last submitter message'] || template)}</textarea>
+        </div>
+        <div style="margin-top:6px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="f-notify-checkbox"${f['Notify submitter on next status change?']!==false?' checked':''}/>
+            Notify submitter on next status change
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Parameters + Decision -->
+    <div class="triage-col">
+      <div class="col-label">Parameters &amp; Decision</div>
+
+      <!-- Categorization -->
+      <div class="collapsible-section">
+        <div class="collapsible-header" onclick="toggleSection(this)">
+          Categorization <span class="chevron open">▼</span>
+        </div>
+        <div class="collapsible-body">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Source</label>
+            <select id="f-source" class="form-control">
+              ${selectOptions(['CS team','MEX team','Product team','Sales team','Marketing team','Other employee','Partner school','Roadshow','NSLS Coach (time suck)','Member feedback'], f['Source'])}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Source detail</label>
+            <input type="text" id="f-source-detail" class="form-control" value="${esc(f['Source detail']||'')}"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Solution type</label>
+            <select id="f-solution-type" class="form-control">
+              ${selectOptions(['Customer-facing','Sales enablement','Internal ops / productivity','Product feature','Infrastructure'], f['Solution type'])}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Affected teams</label>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px">
+              ${multiSelectCheckboxes('affected-teams', ['CS','MEX','Sales','Marketing','Product','Engineering','Finance','Org-wide'], f['Affected teams']||[])}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Impact -->
+      <div class="collapsible-section">
+        <div class="collapsible-header" onclick="toggleSection(this)">
+          Impact <span class="chevron open">▼</span>
+        </div>
+        <div class="collapsible-body">
+          <div class="inline-group">
+            <div class="form-group" style="margin-bottom:0">
+              <label>Chapter health (0–3)</label>
+              <select id="f-chapter-health" class="form-control">
+                ${selectOptions(['0','1','2','3'], f['Chapter health impact'])}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Strategic fit (0–3)</label>
+              <select id="f-strategic-fit" class="form-control">
+                ${selectOptions(['0','1','2','3'], f['Strategic fit'])}
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Time saved (hrs/mo)</label>
+              <input type="number" id="f-time-saved" class="form-control" value="${f['Time saved']||''}" min="0" step="0.5"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Cost savings ($/mo)</label>
+              <input type="number" id="f-cost-savings" class="form-control" value="${f['Cost savings']||''}" min="0"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Revenue impact ($/mo)</label>
+              <input type="number" id="f-revenue-impact" class="form-control" value="${f['Revenue impact']||''}" min="0"/>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>Schools affected (#)</label>
+              <input type="number" id="f-schools-num" class="form-control" value="${f['Schools affected']||''}" min="0"/>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Schools affected (qualitative)</label>
+            <select id="f-schools-qual" class="form-control">
+              ${selectOptions(['All','Many','Specific cohort','Single school'], f['Schools affected (qualitative)'])}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Effort -->
+      <div class="collapsible-section">
+        <div class="collapsible-header" onclick="toggleSection(this)">
+          Effort &amp; Skill <span class="chevron open">▼</span>
+        </div>
+        <div class="collapsible-body">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Effort</label>
+            <select id="f-effort" class="form-control">
+              ${selectOptions(['XS (<2hr)','S (half day)','M (1-2 days)','L (week+)','XL (real project)'], f['Effort'])}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Required skill level</label>
+            <select id="f-skill-level" class="form-control">
+              ${selectOptions(['Maker','Explorer','Builder','Steward','Engineering'], f['Required skill level'])}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Priority override <span style="font-size:11px;color:var(--muted)">(only if pinning)</span></label>
+            <select id="f-priority-override" class="form-control">
+              ${selectOptions(['P0','P1','P2','P3','Parking lot'], f['Priority override'], '— formula only —')}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Decision -->
+      <div>
+        <div class="col-label" style="padding-top:0;border-top:none;margin-bottom:8px">Decision</div>
+        <div class="decision-group" id="decision-group">
+          ${['Route to product team','Move to Ready','Park','Decline'].map(d => `
+            <label class="decision-option${decision===d?' selected':''}">
+              <input type="radio" name="decision" value="${esc(d)}"${decision===d?' checked':''}/>
+              <div>
+                <div class="option-label">${esc(d)}</div>
+              </div>
+            </label>`).join('')}
+        </div>
+      </div>
+
+      <!-- Conditional: Route -->
+      <div class="conditional-fields${decision==='Route to product team'?' visible':''}" id="cond-route">
+        <div class="form-group">
+          <label>Route to<span class="req">*</span></label>
+          <select id="f-routed-to" class="form-control">
+            ${selectOptions(['Lauren (Society \u2014 GitHub)','Core team (David, GitHub)','Help Desk (Jira)'], f['Routed to'])}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Handoff summary</label>
+          <textarea id="f-handoff-summary" class="form-control">${esc(f['Handoff summary']||'')}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Routing handoff link</label>
+          <input type="url" id="f-routing-link" class="form-control" value="${esc(f['Routing handoff link']||'')}"/>
+        </div>
+        <div class="form-group">
+          <label>Routing date</label>
+          <input type="date" id="f-routing-date" class="form-control" value="${esc(f['Routing date']||'')}"/>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+            <input type="checkbox" id="f-routing-accepted"${f['Routing accepted']?' checked':''}/>
+            Routing accepted
+          </label>
+        </div>
+      </div>
+
+      <!-- Conditional: Ready -->
+      <div class="conditional-fields${decision==='Move to Ready'?' visible':''}" id="cond-ready">
+        <div class="form-group">
+          <label>Suggested builder</label>
+          <select id="f-suggested-builder" class="form-control">
+            <option value=""${!f['Suggested builder']?.[0]?' selected':''}>— none —</option>
+            ${builders.map(b => `<option value="${esc(b.id)}"${f['Suggested builder']?.[0]===b.id?' selected':''}>${esc(b.fields.Name||'')}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Assignment note</label>
+          <textarea id="f-assignment-note" class="form-control">${esc(f['Assignment note']||'')}</textarea>
+        </div>
+      </div>
+
+      <!-- Conditional: Park -->
+      <div class="conditional-fields${decision==='Park'?' visible':''}" id="cond-park">
+        <div class="form-group">
+          <label>Park reason</label>
+          <textarea id="f-park-reason" class="form-control">${esc(f['Park reason']||'')}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Revisit date</label>
+          <input type="date" id="f-revisit-date" class="form-control" value="${esc(f['Revisit date']||'')}"/>
+        </div>
+      </div>
+
+      <!-- Conditional: Decline -->
+      <div class="conditional-fields${decision==='Decline'?' visible':''}" id="cond-decline">
+        <div class="form-group">
+          <label>Decline reason</label>
+          <textarea id="f-decline-reason" class="form-control">${esc(f['Decline reason']||'')}</textarea>
+        </div>
+      </div>
+
+    </div><!-- end right col -->
+  `;
+
+  // Wire decision radio buttons
+  document.querySelectorAll('input[name="decision"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      document.querySelectorAll('.decision-option').forEach(el => el.classList.remove('selected'));
+      radio.closest('.decision-option').classList.add('selected');
+      updateConditionals(radio.value);
+    });
+  });
+
+  // Update message preview on submitter status change
+  document.getElementById('f-submitter-status').addEventListener('change', function() {
+    const tmpl = NOTIF_TEMPLATES[this.value] || '';
+    const current = document.getElementById('f-last-message').value;
+    // Only replace if it's still a default template
+    if (Object.values(NOTIF_TEMPLATES).includes(current) || current === '') {
+      document.getElementById('f-last-message').value = tmpl;
+    }
+  });
+
+  // Enable buttons
+  document.getElementById('btn-save').disabled = false;
+  document.getElementById('btn-save-silent').disabled = false;
+  document.getElementById('btn-save-next').disabled = false;
+
+  // Nav
+  if (queue.length) {
+    queueIdx = queue.indexOf(recordId);
+    document.getElementById('btn-prev').disabled = queueIdx <= 0;
+    document.getElementById('btn-next').disabled = queueIdx < 0 || queueIdx >= queue.length - 1;
+    if (queueIdx >= 0) {
+      document.getElementById('nav-info').textContent = `${queueIdx+1} of ${queue.length}`;
+    }
+  }
+}
+
+function updateConditionals(decision) {
+  document.getElementById('cond-route').classList.toggle('visible', decision === 'Route to product team');
+  document.getElementById('cond-ready').classList.toggle('visible', decision === 'Move to Ready');
+  document.getElementById('cond-park').classList.toggle('visible', decision === 'Park');
+  document.getElementById('cond-decline').classList.toggle('visible', decision === 'Decline');
+}
+
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.chevron');
+  body.classList.toggle('hidden');
+  chevron.classList.toggle('open');
+}
+
+function collectFields(notifying) {
+  const getVal = id => {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : null;
+  };
+  const getNum = id => {
+    const v = getVal(id);
+    return v !== '' && v != null ? parseFloat(v) : null;
+  };
+  const getChecked = id => {
+    const el = document.getElementById(id);
+    return el ? el.checked : false;
+  };
+
+  const decision = document.querySelector('input[name="decision"]:checked')?.value || null;
+  const affectedTeams = [...document.querySelectorAll('input[name="affected-teams"]:checked')].map(c => c.value);
+
+  const DECISION_STATUS_MAP = {
+    'Move to Ready': 'Ready',
+    'Route to product team': 'Routed',
+    'Park': 'Parked',
+    'Decline': "Won't do",
+  };
+
+  const fields = {
+    'Triage notes': getVal('f-triage-notes'),
+    'Clarifying questions': getVal('f-clarifying-questions'),
+    'Clarification status': getVal('f-clarification-status') || null,
+    'Submitter status': getVal('f-submitter-status') || null,
+    'Last submitter message': getVal('f-last-message'),
+    'Last submitter message sent on': notifying ? new Date().toISOString().split('T')[0] : (record.fields['Last submitter message sent on'] || null),
+    'Notify submitter on next status change?': getChecked('f-notify-checkbox'),
+    'Source': getVal('f-source') || null,
+    'Source detail': getVal('f-source-detail'),
+    'Solution type': getVal('f-solution-type') || null,
+    'Affected teams': affectedTeams.length ? affectedTeams : null,
+    'Chapter health impact': getVal('f-chapter-health') || null,
+    'Strategic fit': getVal('f-strategic-fit') || null,
+    'Time saved': getNum('f-time-saved'),
+    'Cost savings': getNum('f-cost-savings'),
+    'Revenue impact': getNum('f-revenue-impact'),
+    'Schools affected': getNum('f-schools-num'),
+    'Schools affected (qualitative)': getVal('f-schools-qual') || null,
+    'Effort': getVal('f-effort') || null,
+    'Required skill level': getVal('f-skill-level') || null,
+    'Priority override': getVal('f-priority-override') || null,
+    'Decision': decision,
+  };
+
+  if (decision) {
+    fields['Status'] = DECISION_STATUS_MAP[decision] || record.fields['Status'];
+  }
+
+  if (decision === 'Route to product team') {
+    fields['Routed to'] = getVal('f-routed-to') || null;
+    fields['Handoff summary'] = getVal('f-handoff-summary');
+    fields['Routing handoff link'] = getVal('f-routing-link') || null;
+    fields['Routing date'] = getVal('f-routing-date') || null;
+    fields['Routing accepted'] = getChecked('f-routing-accepted');
+  }
+  if (decision === 'Move to Ready') {
+    fields['Assignment note'] = getVal('f-assignment-note');
+  }
+  if (decision === 'Park') {
+    fields['Park reason'] = getVal('f-park-reason');
+    fields['Revisit date'] = getVal('f-revisit-date') || null;
+  }
+  if (decision === 'Decline') {
+    fields['Decline reason'] = getVal('f-decline-reason');
+  }
+
+  // Remove null values to avoid overwriting with empty
+  return Object.fromEntries(Object.entries(fields).filter(([,v]) => v !== null && v !== undefined));
+}
+
+async function save(notifying, goNext) {
+  const fields = collectFields(notifying);
+  const btns = ['btn-save','btn-save-silent','btn-save-next'];
+  btns.forEach(b => document.getElementById(b).disabled = true);
+
+  try {
+    const r = await fetch(`/api/idea?id=${recordId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error?.message || JSON.stringify(data));
+    showToast('Saved ✓');
+    record = data;
+    if (goNext) navigateNext();
+  } catch (e) {
+    showToast(e.message, true);
+  } finally {
+    btns.forEach(b => document.getElementById(b).disabled = false);
+  }
+}
+
+function navigateNext() {
+  if (queueIdx < 0 || queueIdx >= queue.length - 1) {
+    window.location.href = 'index.html';
+    return;
+  }
+  window.location.href = `triage.html?id=${queue[queueIdx + 1]}`;
+}
+
+function showToast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+document.getElementById('btn-save').addEventListener('click', () => save(true, false));
+document.getElementById('btn-save-silent').addEventListener('click', () => save(false, false));
+document.getElementById('btn-save-next').addEventListener('click', () => save(true, true));
+document.getElementById('btn-prev').addEventListener('click', () => {
+  if (queueIdx > 0) window.location.href = `triage.html?id=${queue[queueIdx-1]}`;
+});
+document.getElementById('btn-next').addEventListener('click', navigateNext);
+
+async function init() {
+  if (!recordId) { window.location.href = 'index.html'; return; }
+  try {
+    const [recRes, bldRes] = await Promise.all([
+      fetch(`/api/idea?id=${recordId}`),
+      fetch('/api/builders'),
+    ]);
+    const recData = await recRes.json();
+    const bldData = await bldRes.json();
+    if (!recRes.ok) throw new Error(recData.error?.message || 'Record not found');
+    record = recData;
+    builders = bldData.records || [];
+    renderLayout(record.fields);
+    document.title = `${record.fields['Idea'] || 'Idea'} — Triage`;
+  } catch (e) {
+    document.getElementById('layout').innerHTML = `<div class="empty" style="grid-column:1/-1"><h3>Error</h3><p>${esc(e.message)}</p></div>`;
+  }
+}
+
+init();
+</script>
+<script>
+(async function() {
+  try {
+    const r = await fetch('/api/auth/session');
+    if (!r.ok) {
+      location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+      return;
+    }
+    const user = await r.json();
+    if (!user.isAdmin) {
+      location.replace('/intake.html');
+      return;
+    }
+    const el = document.getElementById('auth-user');
+    if (el) el.textContent = user.name || user.email;
+  } catch (e) {
+    // network failure — bounce to login rather than reveal the admin page
+    location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+    return;
+  }
+  document.body.style.visibility = 'visible';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Capacity Check-in — NSLS Solutions</title>
+  <link rel="stylesheet" href="style.css"/>
+  <style>body{visibility:hidden}</style>
+</head>
+<body>
+
+<header class="app-header">
+  <a href="index.html" class="logo">NSLS <span>Solutions</span></a>
+  <nav>
+    <a href="index.html">Triage</a>
+    <a href="intake.html">Submit Idea</a>
+    <a href="capacity.html" class="active">Capacity</a>
+    <a href="submit.html">Partner Form ↗</a>
+    <span style="display:flex;align-items:center;gap:12px;margin-left:16px;padding-left:16px;border-left:1px solid var(--border)">
+      <span id="auth-user" style="font-size:12px;color:var(--muted)"></span>
+      <a href="/api/auth/logout" style="font-size:12px;color:var(--muted);text-decoration:none">Sign out</a>
+    </span>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="page-header">
+    <h1>Capacity Check-in</h1>
+    <span class="subtitle">Update your availability for new builds</span>
+  </div>
+
+  <div id="builder-select-wrap" style="max-width:360px;margin-bottom:24px">
+    <div class="form-group">
+      <label for="builder-select">Who are you?</label>
+      <select id="builder-select" class="form-control">
+        <option value="">Loading builders…</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="capacity-wrap" style="display:none">
+    <div style="margin-bottom:16px">
+      <div style="font-size:13px;color:var(--muted)" id="current-status-label"></div>
+    </div>
+    <div class="capacity-grid">
+      <button class="capacity-btn capacity-available" onclick="setCapacity('Available')">
+        ✅ Available
+        <div style="font-size:12px;font-weight:400;margin-top:4px">I have bandwidth for new work</div>
+      </button>
+      <button class="capacity-btn capacity-booked" onclick="setCapacity('Booked')">
+        📅 Booked
+        <div style="font-size:12px;font-weight:400;margin-top:4px">I'm active on something, no new starts</div>
+      </button>
+      <button class="capacity-btn capacity-slammed" onclick="setCapacity('Slammed')">
+        🔥 Slammed
+        <div style="font-size:12px;font-weight:400;margin-top:4px">Don't route anything to me right now</div>
+      </button>
+    </div>
+  </div>
+
+  <div id="all-builders" style="margin-top:40px">
+    <div class="page-header" style="margin-bottom:12px">
+      <h1 style="font-size:16px">Builder capacity overview</h1>
+    </div>
+    <div class="card">
+      <div id="builders-table"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let selectedId = null;
+let currentSignal = null;
+let builders = [];
+
+function staleWarning(dateStr) {
+  if (!dateStr) return ' <span style="color:var(--red);font-size:11px">(never updated)</span>';
+  const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+  if (days > 14) return ` <span style="color:var(--red);font-size:11px">(${days}d ago — treated as Booked)</span>`;
+  if (days > 7) return ` <span style="color:var(--yellow);font-size:11px">(${days}d ago)</span>`;
+  return ` <span style="color:var(--muted);font-size:11px">(${days === 0 ? 'today' : days + 'd ago'})</span>`;
+}
+
+function capacityColor(signal, stale) {
+  if (stale) return 'color:var(--muted)';
+  if (signal === 'Available') return 'color:var(--green)';
+  if (signal === 'Booked') return 'color:var(--yellow)';
+  if (signal === 'Slammed') return 'color:var(--red)';
+  return 'color:var(--muted)';
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function load() {
+  const tableContainer = document.getElementById('builders-table');
+  let data;
+  try {
+    const r = await fetch('/api/builders');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    data = await r.json();
+  } catch (e) {
+    tableContainer.innerHTML = `<div class="empty"><h3>Failed to load builders</h3><p>${esc(e.message)}</p></div>`;
+    return;
+  }
+  builders = data.records || [];
+
+  // Populate selector (listener registered once below)
+  const sel = document.getElementById('builder-select');
+  let opts = '<option value="">— select your name —</option>';
+  builders.forEach(b => {
+    opts += `<option value="${esc(b.id)}">${esc(b.fields.Name||'Unknown')}</option>`;
+  });
+  sel.innerHTML = opts;
+  if (selectedId) sel.value = selectedId;
+
+  // Table view
+  if (builders.length === 0) {
+    tableContainer.innerHTML = '<div class="empty"><h3>No builders found</h3></div>';
+    return;
+  }
+
+  const rows = builders.map(b => {
+    const f = b.fields;
+    const signal = f['Capacity signal'];
+    const updated = f['Capacity last updated'];
+    const stale = updated && (Date.now() - new Date(updated).getTime()) > 14 * 86400000;
+    const display = stale ? 'Booked*' : (signal || '—');
+    return `<tr>
+      <td style="font-weight:500">${esc(f.Name||'')}</td>
+      <td><span style="font-weight:600;${capacityColor(signal, stale)}">${esc(display)}</span></td>
+      <td style="color:var(--muted);font-size:12px">${esc(f.Stage||f['Builder level']||'')}</td>
+      <td style="color:var(--muted);font-size:12px">${updated ? new Date(updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  tableContainer.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Builder</th><th>Capacity</th><th>Level</th><th>Updated</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="padding:8px 16px;font-size:11px;color:var(--muted)">* Stale (&gt;14 days) shown as Booked regardless of last setting</div>`;
+}
+
+function updateButtons(signal) {
+  document.querySelectorAll('.capacity-btn').forEach(btn => btn.classList.remove('active'));
+  if (signal === 'Available') document.querySelector('.capacity-available').classList.add('active');
+  if (signal === 'Booked') document.querySelector('.capacity-booked').classList.add('active');
+  if (signal === 'Slammed') document.querySelector('.capacity-slammed').classList.add('active');
+}
+
+async function setCapacity(signal) {
+  if (!selectedId) return;
+  updateButtons(signal);
+  try {
+    const r = await fetch('/api/capacity', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selectedId, signal }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Save failed');
+    currentSignal = signal;
+    const today = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    document.getElementById('current-status-label').innerHTML =
+      `Current status: <strong>${esc(signal)}</strong> <span style="color:var(--muted);font-size:11px">(today)</span>`;
+    showToast(`Saved: ${signal} ✓`);
+    load(); // refresh table
+  } catch (e) {
+    showToast(e.message, true);
+    updateButtons(currentSignal);
+  }
+}
+
+function showToast(msg, err=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (err ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+document.getElementById('builder-select').addEventListener('change', function() {
+  selectedId = this.value;
+  const builder = builders.find(b => b.id === selectedId);
+  if (!builder) { document.getElementById('capacity-wrap').style.display = 'none'; return; }
+  const f = builder.fields;
+  currentSignal = f['Capacity signal'] || null;
+  updateButtons(currentSignal);
+  const updated = f['Capacity last updated'];
+  document.getElementById('current-status-label').innerHTML =
+    currentSignal
+      ? `Current status: <strong>${esc(currentSignal)}</strong>${staleWarning(updated)}`
+      : `No status set yet.`;
+  document.getElementById('capacity-wrap').style.display = 'block';
+});
+
+
+</script>
+<script>
+(async function() {
+  try {
+    const r = await fetch('/api/auth/session');
+    if (!r.ok) {
+      location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+      return;
+    }
+    const user = await r.json();
+    if (!user.isAdmin) {
+      location.replace('/intake.html');
+      return;
+    }
+    const el = document.getElementById('auth-user');
+    if (el) el.textContent = user.name || user.email;
+  } catch (e) {
+    location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+    return;
+  }
+  load();
+  document.body.style.visibility = 'visible';
+})();
+</script>
+</body>
+</html>
