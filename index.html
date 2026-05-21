@@ -213,9 +213,14 @@ function render() {
       : (f['Internal submitter name'] || f['Internal submitter email'] || '—');
     const descPreview = truncate(f['Description'], 140);
 
+    const isMirrored = f['Source base'] === 'NSLS Automation Tracker';
+    const mirroredBadge = isMirrored ? ' <span class="badge badge-mirrored" title="Synced from Kevin\'s NSLS Automation Tracker">Synced</span>' : '';
+    const actionTitle = isMirrored ? 'Hide from my queue' : 'Delete';
+    const actionFn = isMirrored ? 'hideIdea' : 'deleteIdea';
+
     return `<tr onclick="navigate(this.dataset.id)" data-id="${esc(rec.id)}">
       <td>
-        <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
+        <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${mirroredBadge}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
         <div class="idea-submitter">${esc(submitter)}</div>
         ${descPreview ? `<div class="idea-description-preview">${esc(descPreview)}</div>` : ''}
       </td>
@@ -225,7 +230,7 @@ function render() {
       <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
       <td><span class="score-chip">${score}</span></td>
       <td onclick="event.stopPropagation()">
-        <button onclick="deleteIdea(this.closest('tr').dataset.id, this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="Delete">×</button>
+        <button onclick="${actionFn}(this.closest('tr').dataset.id, this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="${actionTitle}">×</button>
       </td>
     </tr>`;
   }).join('');
@@ -249,6 +254,27 @@ function render() {
 
 function navigate(id) {
   window.location.href = `triage.html?id=${id}`;
+}
+
+async function hideIdea(id, btn) {
+  const title = btn.closest('tr')?.querySelector('.idea-title')?.textContent?.trim() || 'this idea';
+  if (!confirm(`Hide "${title}" from your queue?\n\nThis only hides it from your view. The original record in Kevin's NSLS Automation Tracker is untouched. You can unhide it later by toggling "Hidden" in Airtable.`)) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(`/api/idea?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 'Hidden': true }),
+    });
+    if (!r.ok) throw new Error('Hide failed');
+    btn.closest('tr').remove();
+    showToast('Hidden from your queue.');
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '×';
+    showToast('Hide failed.');
+  }
 }
 
 async function deleteIdea(id, btn) {

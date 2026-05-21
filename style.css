@@ -125,6 +125,7 @@ table.data-table .idea-submitter { color: var(--muted); font-size: 12px; margin-
 table.data-table .idea-description-preview { color: var(--text); font-size: 12px; margin-top: 6px; line-height: 1.4; max-width: 520px; }
 table.data-table th.sortable { cursor: pointer; -webkit-user-select: none; user-select: none; }
 table.data-table th.sortable:hover { color: var(--navy); }
+.badge-mirrored { background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
 table.data-table .date-cell { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 /* Stat bar */
@@ -281,6 +282,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--muted);
+  -webkit-user-select: none;
   user-select: none;
 }
 .collapsible-header:hover { background: #F3F4F6; }

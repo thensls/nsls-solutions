@@ -36,6 +36,7 @@ module.exports = async function handler(req, res) {
     'External submitter email': email,
     'External submitter org': org,
     'External submitter role': role,
+    'Source base': 'Local',
   };
 
   if (reference_links) fields['Reference links'] = reference_links;

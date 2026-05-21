@@ -29,6 +29,7 @@ module.exports = async function handler(req, res) {
     'Submitter status': 'Acknowledged',
     'Submitted on': today,
     'Notify submitter on next status change?': true,
+    'Source base': 'Local',
   };
 
   if (source) fields['Source'] = source;
