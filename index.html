@@ -268,7 +268,8 @@ async function hideIdea(id, btn) {
       body: JSON.stringify({ 'Hidden': true }),
     });
     if (!r.ok) throw new Error('Hide failed');
-    btn.closest('tr').remove();
+    allRecords = allRecords.filter(r => r.id !== id);
+    render();
     showToast('Hidden from your queue.');
   } catch (e) {
     btn.disabled = false;
@@ -287,7 +288,8 @@ async function deleteIdea(id, btn) {
   try {
     const r = await fetch(`/api/idea?id=${id}`, { method: 'DELETE' });
     if (!r.ok) throw new Error('Delete failed');
-    btn.closest('tr').remove();
+    allRecords = allRecords.filter(r => r.id !== id);
+    render();
     showToast('Idea deleted.');
   } catch (e) {
     btn.disabled = false;

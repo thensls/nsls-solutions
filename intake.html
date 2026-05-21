@@ -130,6 +130,9 @@
       <div class="checkmark">✓</div>
       <h2>Idea submitted</h2>
       <p>We'll review it within a few days. You'll get a Slack DM when there's an update.</p>
+      <div id="upload-warning" style="display:none;margin-top:16px;padding:10px 14px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:6px;font-size:13px">
+        Your idea was saved, but the file attachment(s) failed to upload. Please share the files separately.
+      </div>
       <div style="margin-top:24px;display:flex;gap:10px;justify-content:center">
         <a href="intake.html" class="btn btn-ghost">Submit another</a>
         <a href="index.html" class="btn btn-primary" data-admin-only>View triage queue</a>
@@ -198,6 +201,7 @@ document.getElementById('intake-form').addEventListener('submit', async function
   }
 
   // Record created — don't re-enable the submit button from this point on
+  let uploadFailed = false;
   if (selectedFiles.length) {
     btn.textContent = `Uploading ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}…`;
     try {
@@ -217,13 +221,15 @@ document.getElementById('intake-form').addEventListener('submit', async function
         if (!up.ok) throw new Error('Upload failed');
       }
     } catch {
-      errEl.textContent = 'Idea saved, but file upload failed. Share files separately if needed.';
-      errEl.style.display = 'block';
+      uploadFailed = true;
     }
   }
 
   document.getElementById('intake-form').style.display = 'none';
   document.getElementById('success').style.display = 'block';
+  if (uploadFailed) {
+    document.getElementById('upload-warning').style.display = 'block';
+  }
 });
 </script>
 <script>
