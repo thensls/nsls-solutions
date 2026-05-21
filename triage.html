@@ -332,7 +332,7 @@ function renderLayout(f) {
       <div>
         <div class="col-label" style="padding-top:0;border-top:none;margin-bottom:8px">Decision</div>
         <div class="decision-group" id="decision-group">
-          ${['Route to product team','Move to Ready','Park','Decline'].map(d => `
+          ${['Route to product team','Move to Ready','Mark as developed','Park','Decline'].map(d => `
             <label class="decision-option${decision===d?' selected':''}">
               <input type="radio" name="decision" value="${esc(d)}"${decision===d?' checked':''}/>
               <div>
@@ -382,6 +382,26 @@ function renderLayout(f) {
         <div class="form-group">
           <label>Assignment note</label>
           <textarea id="f-assignment-note" class="form-control">${esc(f['Assignment note']||'')}</textarea>
+        </div>
+      </div>
+
+      <!-- Conditional: Mark as developed -->
+      <div class="conditional-fields${decision==='Mark as developed'?' visible':''}" id="cond-developed">
+        <div class="form-group">
+          <label>Repo link</label>
+          <input type="url" id="f-repo-link" class="form-control" value="${esc(f['Repo link']||'')}" placeholder="https://github.com/..."/>
+        </div>
+        <div class="form-group">
+          <label>Demo link</label>
+          <input type="url" id="f-demo-link" class="form-control" value="${esc(f['Demo link']||'')}" placeholder="https://..."/>
+        </div>
+        <div class="form-group">
+          <label>Docs link</label>
+          <input type="url" id="f-docs-link" class="form-control" value="${esc(f['Docs link']||'')}" placeholder="https://..."/>
+        </div>
+        <div class="form-group">
+          <label>Service URL</label>
+          <input type="url" id="f-service-url" class="form-control" value="${esc(f['Service URL']||'')}" placeholder="https://..."/>
         </div>
       </div>
 
@@ -446,6 +466,7 @@ function renderLayout(f) {
 function updateConditionals(decision) {
   document.getElementById('cond-route').classList.toggle('visible', decision === 'Route to product team');
   document.getElementById('cond-ready').classList.toggle('visible', decision === 'Move to Ready');
+  document.getElementById('cond-developed').classList.toggle('visible', decision === 'Mark as developed');
   document.getElementById('cond-park').classList.toggle('visible', decision === 'Park');
   document.getElementById('cond-decline').classList.toggle('visible', decision === 'Decline');
 }
@@ -477,6 +498,7 @@ function collectFields(notifying) {
   const DECISION_STATUS_MAP = {
     'Move to Ready': 'Ready',
     'Route to product team': 'Routed',
+    'Mark as developed': 'Shipped',
     'Park': 'Parked',
     'Decline': "Won't do",
   };
@@ -519,6 +541,12 @@ function collectFields(notifying) {
   }
   if (decision === 'Move to Ready') {
     fields['Assignment note'] = getVal('f-assignment-note');
+  }
+  if (decision === 'Mark as developed') {
+    fields['Repo link'] = getVal('f-repo-link') || null;
+    fields['Demo link'] = getVal('f-demo-link') || null;
+    fields['Docs link'] = getVal('f-docs-link') || null;
+    fields['Service URL'] = getVal('f-service-url') || null;
   }
   if (decision === 'Park') {
     fields['Park reason'] = getVal('f-park-reason');
