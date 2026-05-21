@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
     idea, description, source, solution_type, affected_teams,
     attachments, reference_links, time_saved, cost_savings,
     revenue_impact, urgency_note, submitted_by_name,
-  } = req.body;
+  } = req.body || {};
 
   if (!idea || !description) {
     return res.status(400).json({ error: 'Idea title and description are required' });

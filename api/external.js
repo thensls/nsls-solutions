@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
     name, email, org, role,
     idea, description,
     reference_links, nsls_contact, urgency,
-  } = req.body;
+  } = req.body || {};
 
   if (!name || !email || !org || !role || !idea || !description) {
     return res.status(400).json({ error: 'Name, email, org, role, idea title, and description are required' });
