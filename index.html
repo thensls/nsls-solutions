@@ -78,6 +78,16 @@ function statusBadge(status) {
   return `<span class="badge badge-${cls}">${esc(status || '—')}</span>`;
 }
 
+function stageBadge(stage) {
+  if (!stage) return '';
+  const map = {
+    'Idea': 'parked', 'Design Intent': 'ready', 'Prototype': 'building',
+    'Production': 'shipped', 'Org-Owned': 'routed',
+  };
+  const cls = map[stage] || 'parked';
+  return `<span class="badge badge-${cls}" style="margin-left:4px">${esc(stage)}</span>`;
+}
+
 function sourceBadge(src) {
   if (src === 'External form') return '<span class="badge badge-external">External</span>';
   if (src === 'Internal form') return '<span class="badge badge-internal">Internal</span>';
@@ -245,7 +255,7 @@ function render() {
       </td>
       <td class="submitter-cell">${esc(submitter)}</td>
       <td>${sourceBadge(f['Intake source'])}</td>
-      <td>${statusBadge(f['Status'])}</td>
+      <td style="white-space:nowrap">${statusBadge(f['Status'])}${stageBadge(f['Stage'])}</td>
       <td>${f['Solution type'] ? `<span class="chip">${esc(f['Solution type'])}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
       <td><span class="score-chip">${score}</span></td>

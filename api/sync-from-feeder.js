@@ -87,7 +87,7 @@ module.exports = async function handler(req, res) {
     const feederUrl = `https://api.airtable.com/v0/${FEEDER_BASE}/${FEEDER_TABLE}?filterByFormula=${encodeURIComponent(feederFormula)}&${feederFieldParams}&pageSize=100`;
     const feederRecords = await fetchAll(feederUrl, airHeaders);
 
-    const localFieldParams = ['Source record ID', 'Status', 'Repo link']
+    const localFieldParams = ['Source record ID', 'Status', 'Repo link', 'Stage']
       .map(f => `fields%5B%5D=${encodeURIComponent(f)}`).join('&');
     const localUrl = `${localTableUrl}?filterByFormula=${encodeURIComponent("NOT({Source record ID}='')")}&${localFieldParams}&pageSize=100`;
     const localExisting = await fetchAll(localUrl, airHeaders);
@@ -103,7 +103,8 @@ module.exports = async function handler(req, res) {
     for (const feeder of feederRecords) {
       const existing = existingByFeederId.get(feeder.id);
       const f = feeder.fields;
-      const mappedStatus = STAGE_TO_STATUS[f['Stage']] || 'Triage';
+      const stage = f['Stage'] || null;
+      const mappedStatus = STAGE_TO_STATUS[stage] || 'Triage';
       const repoUrl = f['GitHub Repo URL'] || null;
 
       if (!existing) {
@@ -113,6 +114,7 @@ module.exports = async function handler(req, res) {
             'Description': f['Description'],
             'Intake source': 'Manual entry',
             'Status': mappedStatus,
+            'Stage': stage,
             'Submitter status': 'Acknowledged',
             'Submitted on': today,
             'Source': DEPT_TO_SOURCE[f['Department']],
@@ -129,14 +131,19 @@ module.exports = async function handler(req, res) {
       // Existing mirror — only update if there's something to change.
       // Preserve local Status if user has progressed it beyond 'Triage'.
       // Preserve local Repo link if user has filled it in.
+      // Stage tracks Kevin's source of truth: update whenever it differs.
       const updateFields = {};
       const localStatus = existing.fields['Status'];
       const localRepo = existing.fields['Repo link'];
+      const localStage = existing.fields['Stage'];
       if (localStatus === 'Triage' && mappedStatus !== 'Triage') {
         updateFields['Status'] = mappedStatus;
       }
       if (!localRepo && repoUrl) {
         updateFields['Repo link'] = repoUrl;
+      }
+      if (stage && stage !== localStage) {
+        updateFields['Stage'] = stage;
       }
       if (Object.keys(updateFields).length) {
         toUpdate.push({ id: existing.id, fields: updateFields });

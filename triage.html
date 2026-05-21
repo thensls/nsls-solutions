@@ -160,6 +160,11 @@ const STATUS_BADGE_CLASS = {
   'Archived': 'archived', "Won't do": 'wontdo',
 };
 const ALL_STATUSES = ['Triage','Ready','Picked up','Building','Shipped','Routed','Parked',"Won't do",'Archived'];
+const ALL_STAGES = ['Idea','Design Intent','Prototype','Production','Org-Owned'];
+const STAGE_BADGE_CLASS = {
+  'Idea': 'parked', 'Design Intent': 'ready', 'Prototype': 'building',
+  'Production': 'shipped', 'Org-Owned': 'routed',
+};
 const DECISION_STATUS_MAP = {
   'Move to Ready': 'Ready',
   'Route to product team': 'Routed',
@@ -178,6 +183,8 @@ function renderLayout(f) {
   const decision = f['Decision'] || (isShipped ? 'Mark as developed' : '');
   const status = f['Status'] || 'Triage';
   const statusClass = STATUS_BADGE_CLASS[status] || 'parked';
+  const stage = f['Stage'] || '';
+  const stageClass = STAGE_BADGE_CLASS[stage] || 'parked';
 
   document.getElementById('layout').innerHTML = `
     <!-- LEFT: Raw input -->
@@ -188,6 +195,7 @@ function renderLayout(f) {
         <div class="idea-heading">${esc(f['Idea']||'Untitled')}</div>
         <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <span class="badge badge-${statusClass}">${esc(status)}</span>
+          ${stage?`<span class="badge badge-${stageClass}">${esc(stage)}</span>`:''}
           <span class="badge badge-${(f['Intake source']==='External form'?'external':'internal')}">${esc(f['Intake source']||'Manual')}</span>
           <span style="font-size:12px;color:var(--muted)">${f['Submitted on']?new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}</span>
           <span class="score-chip">${score}</span>
@@ -267,12 +275,21 @@ function renderLayout(f) {
     <div class="triage-col${isShipped?' shipped-locked':''}">
       <div class="col-label">Parameters &amp; Decision${isShipped?' <span class="locked-note">Shipped &mdash; only Status and solution links editable</span>':''}</div>
 
-      <!-- Status (always editable, even on locked records) -->
-      <div class="form-group status-control" style="margin-bottom:16px">
-        <label>Status</label>
-        <select id="f-status" class="form-control">
-          ${selectOptions(ALL_STATUSES, status)}
-        </select>
+      <!-- Status + Stage (always editable, even on locked records) -->
+      <div class="status-control" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Status</label>
+          <select id="f-status" class="form-control">
+            ${selectOptions(ALL_STATUSES, status)}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Stage</label>
+          <select id="f-stage" class="form-control">
+            <option value=""${!stage?' selected':''}>— none —</option>
+            ${selectOptions(ALL_STAGES, stage)}
+          </select>
+        </div>
       </div>
 
       <!-- Categorization -->
@@ -586,6 +603,7 @@ function collectFields(notifying) {
     'Priority override': getVal('f-priority-override') || null,
     'Decision': decision,
     'Status': getVal('f-status') || record.fields['Status'] || 'Triage',
+    'Stage': getVal('f-stage') || null,
     ...submitterFields,
   };
 
