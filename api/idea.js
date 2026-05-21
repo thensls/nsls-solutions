@@ -1,7 +1,11 @@
+const { requireAdmin } = require('./_auth');
+
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Ideas';
 
 module.exports = async function handler(req, res) {
+  if (!(await requireAdmin(req, res))) return;
+
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'Missing id' });
 

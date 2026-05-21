@@ -1,8 +1,11 @@
+const { requireAdmin } = require('./_auth');
+
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Builders';
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'PATCH') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireAdmin(req, res))) return;
 
   const { id, signal } = req.body;
   if (!id || !signal) return res.status(400).json({ error: 'id and signal required' });

@@ -1,8 +1,13 @@
+const { requireUser } = require('./_auth');
+const { notifyNewIdea } = require('./_notify');
+
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Ideas';
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const user = await requireUser(req, res);
+  if (!user) return;
 
   const {
     idea, description, source, solution_type, affected_teams,
@@ -24,6 +29,7 @@ module.exports = async function handler(req, res) {
     'Submitter status': 'Acknowledged',
     'Submitted on': today,
     'Notify submitter on next status change?': true,
+    'Source base': 'Local',
   };
 
   if (source) fields['Source'] = source;
@@ -37,7 +43,8 @@ module.exports = async function handler(req, res) {
   if (cost_savings != null && cost_savings !== '' && !isNaN(cs)) fields['Cost savings'] = cs;
   if (revenue_impact != null && revenue_impact !== '' && !isNaN(ri)) fields['Revenue impact'] = ri;
   if (urgency_note) fields['Notes'] = urgency_note;
-  if (submitted_by_name) fields['Submitted by'] = submitted_by_name;
+  if (submitted_by_name) fields['Internal submitter name'] = submitted_by_name;
+  if (user.email) fields['Internal submitter email'] = user.email;
 
   try {
     const r = await fetch(
@@ -52,6 +59,11 @@ module.exports = async function handler(req, res) {
       }
     );
     const data = await r.json();
+    if (r.ok && data?.id) {
+      // Fire-and-forget — never let notification errors fail a successful submit
+      notifyNewIdea({ recordId: data.id, fields, kind: 'internal' })
+        .catch(err => console.error('Notify error (intake):', err.message));
+    }
     res.status(r.status).json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });

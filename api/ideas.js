@@ -1,10 +1,13 @@
+const { requireAdmin } = require('./_auth');
+
 const BASE = 'appd1hcbJXgvVXF05';
 const TABLE = 'Ideas';
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireAdmin(req, res))) return;
 
-  const { status, source, limit = '200', offset } = req.query;
+  const { status, source, limit = '200', offset, include_hidden } = req.query;
 
   function escAirtable(s) {
     return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -13,6 +16,7 @@ module.exports = async function handler(req, res) {
   const filters = [];
   if (status) filters.push(`{Status} = "${escAirtable(status)}"`);
   if (source) filters.push(`{Intake source} = "${escAirtable(source)}"`);
+  if (include_hidden !== '1') filters.push(`NOT({Hidden})`);
 
   const params = new URLSearchParams();
   if (filters.length === 1) params.set('filterByFormula', filters[0]);

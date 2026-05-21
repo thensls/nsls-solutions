@@ -43,7 +43,8 @@
       <span class="stat-label">Needs response (&gt;5 days)</span>
     </div>
     <div style="flex:1"></div>
-    <div style="display:flex;align-items:center;gap:8px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <input type="search" id="search-input" class="form-control" placeholder="Search ideas, descriptions, submitters…" style="width:280px" />
       <label style="font-size:12px;color:var(--muted);font-weight:500">Filter:</label>
       <select id="filter-status" class="form-control" style="width:160px">
         <option value="Triage">Triage</option>
@@ -112,6 +113,37 @@ function computeScore(f) {
   return ((ch*3)+(sf*2)+(ts/10)+(cs/500)+(ri/1000)+sq)/ew;
 }
 
+let allRecords = [];
+let sortField = 'submitted';
+let sortDir = 'desc';
+let searchQuery = '';
+
+const SORT_FNS = {
+  idea: (a, b) => (a.fields['Idea'] || '').localeCompare(b.fields['Idea'] || ''),
+  source: (a, b) => (a.fields['Intake source'] || '').localeCompare(b.fields['Intake source'] || ''),
+  status: (a, b) => (a.fields['Status'] || '').localeCompare(b.fields['Status'] || ''),
+  type: (a, b) => (a.fields['Solution type'] || '').localeCompare(b.fields['Solution type'] || ''),
+  submitted: (a, b) => (a.fields['Submitted on'] || '').localeCompare(b.fields['Submitted on'] || ''),
+  score: (a, b) => computeScore(a.fields) - computeScore(b.fields),
+};
+
+const SORT_DEFAULT_DIR = { submitted: 'desc', score: 'desc' };
+
+function setSort(field) {
+  if (sortField === field) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField = field;
+    sortDir = SORT_DEFAULT_DIR[field] || 'asc';
+  }
+  render();
+}
+
+function arrow(field) {
+  if (sortField !== field) return ' <span style="opacity:0.25">↕</span>';
+  return sortDir === 'asc' ? ' <span>↑</span>' : ' <span>↓</span>';
+}
+
 async function load() {
   const status = document.getElementById('filter-status').value;
   const container = document.getElementById('table-container');
@@ -124,79 +156,132 @@ async function load() {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`API error ${r.status}`);
     const data = await r.json();
-
-    const records = data.records || [];
-    const external = records.filter(r => r.fields['Intake source'] === 'External form');
-    const needsResponse = records.filter(r => {
-      const f = r.fields;
-      return f['Submitter status'] === 'Acknowledged' &&
-             f['Submitted on'] &&
-             (Date.now() - new Date(f['Submitted on']).getTime()) > FIVE_DAYS_MS;
-    });
-
-    document.getElementById('stat-total').textContent = status === 'Triage' ? records.length : '—';
-    document.getElementById('stat-external').textContent = status === 'Triage' ? external.length : '—';
-    document.getElementById('stat-needs-response').textContent = needsResponse.length;
-    document.getElementById('queue-summary').textContent =
-      status ? `${records.length} idea${records.length !== 1 ? 's' : ''} · ${status}` : `${records.length} total`;
-
-    // Store sorted IDs for triage navigation
-    sessionStorage.setItem('triageQueue', JSON.stringify(records.map(r => r.id)));
-
-    if (records.length === 0) {
-      container.innerHTML = '<div class="empty"><h3>All clear</h3><p>No ideas in this view.</p></div>';
-      return;
-    }
-
-    const rows = records.map((rec, i) => {
-      const f = rec.fields;
-      const score = computeScore(f).toFixed(1);
-      const submitter = f['Intake source'] === 'External form'
-        ? (f['External submitter name'] || 'External') + (f['External submitter org'] ? ` · ${f['External submitter org']}` : '')
-        : (f['Submitted by'] || 'Internal');
-
-      return `<tr onclick="navigate(this.dataset.id)" data-id="${esc(rec.id)}">
-        <td>
-          <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
-          <div class="idea-submitter">${esc(submitter)}</div>
-        </td>
-        <td>${sourceBadge(f['Intake source'])}</td>
-        <td>${statusBadge(f['Status'])}</td>
-        <td>${f['Solution type'] ? `<span class="chip">${esc(f['Solution type'])}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
-        <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
-        <td><span class="score-chip">${score}</span></td>
-        <td onclick="event.stopPropagation()">
-          <button onclick="deleteIdea(this.closest('tr').dataset.id, this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="Delete">×</button>
-        </td>
-      </tr>`;
-    }).join('');
-
-    container.innerHTML = `
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Idea</th>
-            <th>Source</th>
-            <th>Status</th>
-            <th>Type</th>
-            <th>Submitted</th>
-            <th>Score</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+    allRecords = data.records || [];
+    render();
   } catch (e) {
     container.innerHTML = `<div class="empty"><h3>Error loading ideas</h3><p>${esc(e.message)}</p></div>`;
   }
+}
+
+function render() {
+  const container = document.getElementById('table-container');
+  const status = document.getElementById('filter-status').value;
+
+  let records = allRecords;
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    records = records.filter(rec => {
+      const f = rec.fields;
+      return [
+        f['Idea'], f['Description'],
+        f['Internal submitter name'], f['Internal submitter email'],
+        f['External submitter name'], f['External submitter email'], f['External submitter org'],
+        f['Solution type'], f['Status'], f['Source'], f['Notes'],
+      ].some(v => v && String(v).toLowerCase().includes(q));
+    });
+  }
+
+  records = records.slice().sort(SORT_FNS[sortField] || SORT_FNS.submitted);
+  if (sortDir === 'desc') records.reverse();
+
+  const external = allRecords.filter(r => r.fields['Intake source'] === 'External form');
+  const needsResponse = allRecords.filter(r => {
+    const f = r.fields;
+    return f['Submitter status'] === 'Acknowledged' && f['Submitted on'] &&
+      (Date.now() - new Date(f['Submitted on']).getTime()) > FIVE_DAYS_MS;
+  });
+  document.getElementById('stat-total').textContent = status === 'Triage' ? allRecords.length : '—';
+  document.getElementById('stat-external').textContent = status === 'Triage' ? external.length : '—';
+  document.getElementById('stat-needs-response').textContent = needsResponse.length;
+  document.getElementById('queue-summary').textContent = searchQuery
+    ? `${records.length} of ${allRecords.length} match "${searchQuery}"`
+    : (status ? `${allRecords.length} idea${allRecords.length !== 1 ? 's' : ''} · ${status}` : `${allRecords.length} total`);
+
+  sessionStorage.setItem('triageQueue', JSON.stringify(records.map(r => r.id)));
+
+  if (records.length === 0) {
+    container.innerHTML = `<div class="empty"><h3>${searchQuery ? 'No matches' : 'All clear'}</h3><p>${searchQuery ? `Nothing matches "${esc(searchQuery)}".` : 'No ideas in this view.'}</p></div>`;
+    return;
+  }
+
+  const rows = records.map((rec) => {
+    const f = rec.fields;
+    const score = computeScore(f).toFixed(1);
+    const submitter = f['Intake source'] === 'External form'
+      ? ((f['External submitter name'] || f['External submitter email'] || '—') +
+         (f['External submitter org'] ? ` · ${f['External submitter org']}` : ''))
+      : (f['Internal submitter name'] || f['Internal submitter email'] || '—');
+    const descPreview = truncate(f['Description'], 140);
+
+    const isMirrored = f['Source base'] === 'NSLS Automation Tracker';
+    const mirroredBadge = isMirrored ? ' <span class="badge badge-mirrored" title="Synced from Kevin\'s NSLS Automation Tracker">Synced</span>' : '';
+    const actionTitle = isMirrored ? 'Hide from my queue' : 'Delete';
+    const actionFn = isMirrored ? 'hideIdea' : 'deleteIdea';
+
+    return `<tr onclick="navigate(this.dataset.id)" data-id="${esc(rec.id)}">
+      <td>
+        <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${mirroredBadge}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
+        <div class="idea-submitter">${esc(submitter)}</div>
+        ${descPreview ? `<div class="idea-description-preview">${esc(descPreview)}</div>` : ''}
+      </td>
+      <td>${sourceBadge(f['Intake source'])}</td>
+      <td>${statusBadge(f['Status'])}</td>
+      <td>${f['Solution type'] ? `<span class="chip">${esc(f['Solution type'])}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
+      <td><span class="score-chip">${score}</span></td>
+      <td onclick="event.stopPropagation()">
+        <button onclick="${actionFn}(this.closest('tr').dataset.id, this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 6px;border-radius:4px;line-height:1" title="${actionTitle}">×</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th class="sortable" onclick="setSort('idea')">Idea${arrow('idea')}</th>
+          <th class="sortable" onclick="setSort('source')">Source${arrow('source')}</th>
+          <th class="sortable" onclick="setSort('status')">Status${arrow('status')}</th>
+          <th class="sortable" onclick="setSort('type')">Type${arrow('type')}</th>
+          <th class="sortable" onclick="setSort('submitted')">Submitted${arrow('submitted')}</th>
+          <th class="sortable" onclick="setSort('score')">Score${arrow('score')}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 function navigate(id) {
   window.location.href = `triage.html?id=${id}`;
 }
 
+async function hideIdea(id, btn) {
+  const title = btn.closest('tr')?.querySelector('.idea-title')?.textContent?.trim() || 'this idea';
+  if (!confirm(`Hide "${title}" from your queue?\n\nThis only hides it from your view. The original record in Kevin's NSLS Automation Tracker is untouched. You can unhide it later by toggling "Hidden" in Airtable.`)) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(`/api/idea?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 'Hidden': true }),
+    });
+    if (!r.ok) throw new Error('Hide failed');
+    btn.closest('tr').remove();
+    showToast('Hidden from your queue.');
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '×';
+    showToast('Hide failed.');
+  }
+}
+
 async function deleteIdea(id, btn) {
-  if (!confirm('Delete this idea? This cannot be undone.')) return;
+  const title = btn.closest('tr')?.querySelector('.idea-title')?.textContent?.trim() || 'this idea';
+  const msg = `Permanently delete "${title}" from the NSLS Solutions Airtable base?\n\nThis removes the record from the shared base for everyone — not just hidden here. Only a full-table snapshot rollback (within 7 days) could bring it back.\n\nType DELETE to confirm:`;
+  const confirmation = prompt(msg);
+  if (confirmation !== 'DELETE') return;
   btn.disabled = true;
   btn.textContent = '…';
   try {
@@ -222,6 +307,12 @@ function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function truncate(s, n) {
+  if (!s) return '';
+  const t = String(s).replace(/\s+/g, ' ').trim();
+  return t.length > n ? t.slice(0, n).trimEnd() + '…' : t;
+}
+
 
 </script>
 <script>
@@ -233,12 +324,23 @@ function esc(str) {
       return;
     }
     const user = await r.json();
+    if (!user.isAdmin) {
+      location.replace('/intake.html');
+      return;
+    }
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
   } catch (e) {
-    // network failure — show page rather than hang
+    // network failure — bounce to login rather than reveal the admin queue
+    location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+    return;
   }
   document.getElementById('filter-status').addEventListener('change', load);
+  let searchTimer;
+  document.getElementById('search-input').addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { searchQuery = e.target.value.trim(); render(); }, 150);
+  });
   load();
   document.body.style.visibility = 'visible';
 })();

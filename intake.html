@@ -12,9 +12,9 @@
 <header class="app-header">
   <a href="index.html" class="logo">NSLS <span>Solutions</span></a>
   <nav>
-    <a href="index.html">Triage</a>
+    <a href="index.html" data-admin-only>Triage</a>
     <a href="intake.html" class="active">Submit Idea</a>
-    <a href="capacity.html">Capacity</a>
+    <a href="capacity.html" data-admin-only>Capacity</a>
     <a href="submit.html">Partner Form ↗</a>
     <span style="display:flex;align-items:center;gap:12px;margin-left:16px;padding-left:16px;border-left:1px solid var(--border)">
       <span id="auth-user" style="font-size:12px;color:var(--muted)"></span>
@@ -132,7 +132,7 @@
       <p>We'll review it within a few days. You'll get a Slack DM when there's an update.</p>
       <div style="margin-top:24px;display:flex;gap:10px;justify-content:center">
         <a href="intake.html" class="btn btn-ghost">Submit another</a>
-        <a href="index.html" class="btn btn-primary">View triage queue</a>
+        <a href="index.html" class="btn btn-primary" data-admin-only>View triage queue</a>
       </div>
     </div>
   </div>
@@ -237,6 +237,9 @@ document.getElementById('intake-form').addEventListener('submit', async function
     const user = await r.json();
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
+    if (!user.isAdmin) {
+      document.querySelectorAll('[data-admin-only]').forEach(n => n.style.display = 'none');
+    }
   } catch (e) {
     location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
     return;
