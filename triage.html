@@ -122,17 +122,35 @@ function multiSelectCheckboxes(name, opts, current=[]) {
 
 function renderSubmitterCard(f) {
   const isExt = f['Intake source'] === 'External form';
-  if (isExt) {
-    return `<div class="submitter-card">
-      <div class="name">${esc(f['External submitter name']||'Unknown')}</div>
-      <div class="meta">${esc(f['External submitter role']||'')}${f['External submitter org']?` · ${esc(f['External submitter org'])}`:''}
-        ${f['External submitter email']?`<br><a href="mailto:${esc(f['External submitter email'])}" style="color:var(--blue)">${esc(f['External submitter email'])}</a>`:''}</div>
-      ${f['Related NSLS contact']?`<div class="meta" style="margin-top:6px">NSLS contact: ${esc(f['Related NSLS contact'])}</div>`:''}
-    </div>`;
-  }
+  const nameField = isExt ? 'External submitter name' : 'Internal submitter name';
+  const emailField = isExt ? 'External submitter email' : 'Internal submitter email';
+  const label = isExt ? 'External Submission' : 'Internal Submission';
+  const dateStr = f['Submitted on'] ? new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
+
+  const extraExt = isExt ? `
+    <div class="form-group" style="margin-top:8px;margin-bottom:0">
+      <label style="font-size:11px">Org</label>
+      <input type="text" id="f-submitter-org" class="form-control" value="${esc(f['External submitter org']||'')}"/>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label style="font-size:11px">Role</label>
+      <input type="text" id="f-submitter-role" class="form-control" value="${esc(f['External submitter role']||'')}"/>
+    </div>
+    ${f['Related NSLS contact']?`<div class="meta" style="margin-top:8px">NSLS contact: ${esc(f['Related NSLS contact'])}</div>`:''}
+  ` : '';
+
   return `<div class="submitter-card">
-    <div class="name">Internal Submission</div>
-    <div class="meta">${f['Submitted on']?new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):''}</div>
+    <div class="name">${esc(label)}</div>
+    <div class="meta">${esc(dateStr)}</div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0">
+      <label style="font-size:11px">Submitter name</label>
+      <input type="text" id="f-submitter-name" class="form-control" data-field="${esc(nameField)}" value="${esc(f[nameField]||'')}" placeholder="Who submitted this?"/>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label style="font-size:11px">Submitter email</label>
+      <input type="email" id="f-submitter-email" class="form-control" data-field="${esc(emailField)}" value="${esc(f[emailField]||'')}" placeholder="name@nsls.org"/>
+    </div>
+    ${extraExt}
   </div>`;
 }
 
@@ -533,6 +551,17 @@ function collectFields(notifying) {
   const decision = document.querySelector('input[name="decision"]:checked')?.value || null;
   const affectedTeams = [...document.querySelectorAll('input[name="affected-teams"]:checked')].map(c => c.value);
 
+  // Submitter fields — input data-field attribute tells us which Airtable field to write to
+  const submitterFields = {};
+  const nameEl = document.getElementById('f-submitter-name');
+  const emailEl = document.getElementById('f-submitter-email');
+  const orgEl = document.getElementById('f-submitter-org');
+  const roleEl = document.getElementById('f-submitter-role');
+  if (nameEl) submitterFields[nameEl.dataset.field] = nameEl.value.trim() || null;
+  if (emailEl) submitterFields[emailEl.dataset.field] = emailEl.value.trim() || null;
+  if (orgEl) submitterFields['External submitter org'] = orgEl.value.trim() || null;
+  if (roleEl) submitterFields['External submitter role'] = roleEl.value.trim() || null;
+
   const fields = {
     'Triage notes': getVal('f-triage-notes'),
     'Clarifying questions': getVal('f-clarifying-questions'),
@@ -557,6 +586,7 @@ function collectFields(notifying) {
     'Priority override': getVal('f-priority-override') || null,
     'Decision': decision,
     'Status': getVal('f-status') || record.fields['Status'] || 'Triage',
+    ...submitterFields,
   };
 
   if (decision === 'Route to product team') {
