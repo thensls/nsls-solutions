@@ -227,7 +227,6 @@ document.getElementById('intake-form').addEventListener('submit', async function
 });
 </script>
 <script>
-const ADMIN_EMAILS = ['chigbee@nsls.org'];
 (async function() {
   try {
     const r = await fetch('/api/auth/session');
@@ -238,7 +237,7 @@ const ADMIN_EMAILS = ['chigbee@nsls.org'];
     const user = await r.json();
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
-    if (!ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
+    if (!user.isAdmin) {
       document.querySelectorAll('[data-admin-only]').forEach(n => n.style.display = 'none');
     }
   } catch (e) {

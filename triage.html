@@ -599,7 +599,6 @@ async function init() {
 init();
 </script>
 <script>
-const ADMIN_EMAILS = ['chigbee@nsls.org'];
 (async function() {
   try {
     const r = await fetch('/api/auth/session');
@@ -608,14 +607,16 @@ const ADMIN_EMAILS = ['chigbee@nsls.org'];
       return;
     }
     const user = await r.json();
-    if (!ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
+    if (!user.isAdmin) {
       location.replace('/intake.html');
       return;
     }
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
   } catch (e) {
-    // network failure — show page rather than hang
+    // network failure — bounce to login rather than reveal the admin page
+    location.replace('/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search));
+    return;
   }
   document.body.style.visibility = 'visible';
 })();

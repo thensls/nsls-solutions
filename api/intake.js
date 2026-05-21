@@ -60,7 +60,9 @@ module.exports = async function handler(req, res) {
     );
     const data = await r.json();
     if (r.ok && data?.id) {
-      await notifyNewIdea({ recordId: data.id, fields, kind: 'internal' });
+      // Fire-and-forget — never let notification errors fail a successful submit
+      notifyNewIdea({ recordId: data.id, fields, kind: 'internal' })
+        .catch(err => console.error('Notify error (intake):', err.message));
     }
     res.status(r.status).json(data);
   } catch (e) {

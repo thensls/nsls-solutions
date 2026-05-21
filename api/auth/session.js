@@ -1,4 +1,5 @@
 const { jwtVerify } = require('jose');
+const { ADMIN_EMAILS } = require('../_auth');
 
 function parseCookies(req) {
   const cookies = {};
@@ -19,7 +20,8 @@ module.exports = async function handler(req, res) {
   try {
     const secret = new TextEncoder().encode(sessionSecret);
     const { payload } = await jwtVerify(token, secret);
-    res.json({ sub: payload.sub, email: payload.email, name: payload.name });
+    const isAdmin = ADMIN_EMAILS.includes((payload.email || '').toLowerCase());
+    res.json({ sub: payload.sub, email: payload.email, name: payload.name, isAdmin });
   } catch {
     res.setHeader('Set-Cookie', 'nsls_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
     res.status(401).json({ error: 'Session expired' });

@@ -200,7 +200,6 @@ document.getElementById('builder-select').addEventListener('change', function() 
 
 </script>
 <script>
-const ADMIN_EMAILS = ['chigbee@nsls.org'];
 (async function() {
   try {
     const r = await fetch('/api/auth/session');
@@ -209,7 +208,7 @@ const ADMIN_EMAILS = ['chigbee@nsls.org'];
       return;
     }
     const user = await r.json();
-    if (!ADMIN_EMAILS.includes((user.email || '').toLowerCase())) {
+    if (!user.isAdmin) {
       location.replace('/intake.html');
       return;
     }
