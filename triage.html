@@ -653,6 +653,8 @@ function collectFields(notifying) {
   }
   if (decision === 'Move to Ready') {
     fields['Assignment note'] = getVal('f-assignment-note');
+    const builderId = getVal('f-suggested-builder');
+    fields['Suggested builder'] = builderId ? [builderId] : null;
   }
   if (decision === 'Mark as developed') {
     fields['Repo link'] = getVal('f-repo-link') || null;
