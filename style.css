@@ -126,6 +126,9 @@ table.data-table .idea-description-preview { color: var(--text); font-size: 12px
 table.data-table th.sortable { cursor: pointer; -webkit-user-select: none; user-select: none; }
 table.data-table th.sortable:hover { color: var(--navy); }
 .badge-mirrored { background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
+.solution-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.solution-link { display: inline-flex; align-items: center; padding: 2px 8px; background: #EEF2FF; color: #3730A3; border-radius: 4px; font-size: 11px; font-weight: 500; text-decoration: none; border: 1px solid #C7D2FE; }
+.solution-link:hover { background: #E0E7FF; }
 table.data-table .date-cell { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
 /* Stat bar */

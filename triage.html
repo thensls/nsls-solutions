@@ -26,6 +26,10 @@
     .suggested-builder-row { display: flex; gap: 8px; align-items: flex-end; }
     .suggested-builder-row select { flex: 1; }
     .triage-col .inline-group { grid-template-columns: 1fr; }
+    .shipped-locked .collapsible-section { opacity: 0.5; pointer-events: none; }
+    .shipped-locked .decision-option.locked { opacity: 0.4; cursor: not-allowed; }
+    .shipped-locked #cond-developed { opacity: 1; }
+    .locked-note { font-size: 10px; font-weight: 600; color: #92400E; background: #FEF3C7; padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: none; letter-spacing: 0; }
   </style>
 </head>
 <body>
@@ -136,7 +140,10 @@ function renderLayout(f) {
   const score = computeScore(f).toFixed(1);
   const submitterStatus = f['Submitter status'] || 'Acknowledged';
   const template = NOTIF_TEMPLATES[submitterStatus] || '';
-  const decision = f['Decision'] || '';
+  // For already-shipped records (synced or marked locally), pre-select the
+  // matching decision even if the Decision field was never set explicitly.
+  const isShipped = f['Status'] === 'Shipped';
+  const decision = f['Decision'] || (isShipped ? 'Mark as developed' : '');
 
   document.getElementById('layout').innerHTML = `
     <!-- LEFT: Raw input -->
@@ -222,8 +229,8 @@ function renderLayout(f) {
     </div>
 
     <!-- RIGHT: Parameters + Decision -->
-    <div class="triage-col">
-      <div class="col-label">Parameters &amp; Decision</div>
+    <div class="triage-col${isShipped?' shipped-locked':''}">
+      <div class="col-label">Parameters &amp; Decision${isShipped?' <span class="locked-note">Shipped &mdash; only solution links editable</span>':''}</div>
 
       <!-- Categorization -->
       <div class="collapsible-section">
@@ -332,13 +339,17 @@ function renderLayout(f) {
       <div>
         <div class="col-label" style="padding-top:0;border-top:none;margin-bottom:8px">Decision</div>
         <div class="decision-group" id="decision-group">
-          ${['Route to product team','Move to Ready','Mark as developed','Park','Decline'].map(d => `
-            <label class="decision-option${decision===d?' selected':''}">
-              <input type="radio" name="decision" value="${esc(d)}"${decision===d?' checked':''}/>
+          ${['Route to product team','Move to Ready','Mark as developed','Park','Decline'].map(d => {
+            const isSelected = decision === d;
+            const isLocked = isShipped && d !== 'Mark as developed';
+            return `
+            <label class="decision-option${isSelected?' selected':''}${isLocked?' locked':''}">
+              <input type="radio" name="decision" value="${esc(d)}"${isSelected?' checked':''}${isLocked?' disabled':''}/>
               <div>
                 <div class="option-label">${esc(d)}</div>
               </div>
-            </label>`).join('')}
+            </label>`;
+          }).join('')}
         </div>
       </div>
 

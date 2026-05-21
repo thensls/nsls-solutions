@@ -49,6 +49,7 @@
       <select id="filter-status" class="form-control" style="width:160px">
         <option value="Triage">Triage</option>
         <option value="Ready">Ready</option>
+        <option value="Shipped">Shipped</option>
         <option value="Parked">Parked</option>
         <option value="">All ideas</option>
       </select>
@@ -88,6 +89,19 @@ function submitterText(f) {
     ? ((f['External submitter name'] || f['External submitter email'] || '—') +
        (f['External submitter org'] ? ` · ${f['External submitter org']}` : ''))
     : (f['Internal submitter name'] || f['Internal submitter email'] || '—');
+}
+
+function solutionLinks(f) {
+  const links = [
+    ['Repo', f['Repo link']],
+    ['Demo', f['Demo link']],
+    ['Docs', f['Docs link']],
+    ['Service', f['Service URL']],
+  ].filter(([, url]) => url);
+  if (!links.length) return '';
+  return `<div class="solution-links">${links.map(([label, url]) =>
+    `<a href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="solution-link" title="${esc(url)}">${label} ↗</a>`
+  ).join('')}</div>`;
 }
 
 function relativeDate(iso) {
@@ -227,6 +241,7 @@ function render() {
       <td>
         <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${mirroredBadge}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
         ${descPreview ? `<div class="idea-description-preview">${esc(descPreview)}</div>` : ''}
+        ${solutionLinks(f)}
       </td>
       <td class="submitter-cell">${esc(submitter)}</td>
       <td>${sourceBadge(f['Intake source'])}</td>
