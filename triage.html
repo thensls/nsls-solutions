@@ -292,6 +292,25 @@ function renderLayout(f) {
         </div>
       </div>
 
+      <!-- Assignment (always editable) -->
+      <div class="assignment-control" style="margin-bottom:16px;padding:10px 12px;background:#F9FAFB;border:1px solid var(--border);border-radius:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Assigned to</label>
+            <input type="text" id="f-assigned-to" class="form-control" value="${esc(f['Assigned to']||'')}" placeholder="Name (free text)"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Assignment task</label>
+            <select id="f-assignment-task" class="form-control">
+              <option value=""${!f['Assignment task']?' selected':''}>— none —</option>
+              ${selectOptions(['Build it','Research it','Spec it','Review it','Pilot it','Other'], f['Assignment task'])}
+            </select>
+          </div>
+        </div>
+        ${f['Assigned on']?`<div class="meta" style="font-size:11px;color:var(--muted)">Last assigned ${new Date(f['Assigned on']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>`:''}
+        ${f['Assignment history']?`<details style="margin-top:8px"><summary style="font-size:11px;color:var(--muted);cursor:pointer">Assignment history</summary><pre style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;color:var(--text);font-family:inherit">${esc(f['Assignment history'])}</pre></details>`:''}
+      </div>
+
       <!-- Categorization -->
       <div class="collapsible-section">
         <div class="collapsible-header" onclick="toggleSection(this)">
@@ -579,6 +598,23 @@ function collectFields(notifying) {
   if (orgEl) submitterFields['External submitter org'] = orgEl.value.trim() || null;
   if (roleEl) submitterFields['External submitter role'] = roleEl.value.trim() || null;
 
+  // Assignment — if assignee or task changed since load, append a history entry
+  const assignmentFields = {};
+  const newAssignedTo = getVal('f-assigned-to') || '';
+  const newAssignmentTask = getVal('f-assignment-task') || '';
+  const prevAssignedTo = (record.fields['Assigned to'] || '').trim();
+  const prevAssignmentTask = (record.fields['Assignment task'] || '').trim();
+  const assignmentChanged = (newAssignedTo !== prevAssignedTo) || (newAssignmentTask !== prevAssignmentTask);
+  if (assignmentChanged && (newAssignedTo || newAssignmentTask)) {
+    const today = new Date().toISOString().split('T')[0];
+    const entry = `[${today}] ${newAssignedTo || '—'} → ${newAssignmentTask || '—'}`;
+    const existing = record.fields['Assignment history'] || '';
+    assignmentFields['Assignment history'] = existing ? `${entry}\n${existing}` : entry;
+    assignmentFields['Assigned on'] = today;
+  }
+  assignmentFields['Assigned to'] = newAssignedTo || null;
+  assignmentFields['Assignment task'] = newAssignmentTask || null;
+
   const fields = {
     'Triage notes': getVal('f-triage-notes'),
     'Clarifying questions': getVal('f-clarifying-questions'),
@@ -605,6 +641,7 @@ function collectFields(notifying) {
     'Status': getVal('f-status') || record.fields['Status'] || 'Triage',
     'Stage': getVal('f-stage') || null,
     ...submitterFields,
+    ...assignmentFields,
   };
 
   if (decision === 'Route to product team') {
