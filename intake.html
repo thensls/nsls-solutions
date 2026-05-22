@@ -243,6 +243,11 @@ document.getElementById('intake-form').addEventListener('submit', async function
     const user = await r.json();
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
+    // Pre-fill the submitter's name so it's captured even if they don't type it
+    const nameInput = document.getElementById('submitted-by');
+    if (nameInput && !nameInput.value && (user.name || user.email)) {
+      nameInput.value = user.name || user.email;
+    }
     if (!user.isAdmin) {
       document.querySelectorAll('[data-admin-only]').forEach(n => n.style.display = 'none');
     }
