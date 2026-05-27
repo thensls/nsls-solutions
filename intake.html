@@ -113,9 +113,15 @@
         <textarea id="urgency" class="form-control" rows="2" placeholder="Is there a deadline or dependency we should know about?"></textarea>
       </div>
 
-      <div class="form-group">
-        <label for="submitted-by">Your name</label>
-        <input type="text" id="submitted-by" class="form-control" placeholder="Your name"/>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label for="submitted-by">Your name</label>
+          <input type="text" id="submitted-by" class="form-control" placeholder="Your name"/>
+        </div>
+        <div class="form-group">
+          <label for="submitted-by-email">Your email<span class="req">*</span></label>
+          <input type="email" id="submitted-by-email" class="form-control" placeholder="name@nsls.org" required/>
+        </div>
       </div>
 
       <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:24px">
@@ -150,8 +156,14 @@ document.getElementById('intake-form').addEventListener('submit', async function
 
   const idea = document.getElementById('idea').value.trim();
   const description = document.getElementById('description').value.trim();
+  const submittedByEmail = document.getElementById('submitted-by-email').value.trim();
   if (!idea || !description) {
     errEl.textContent = 'Idea title and description are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!submittedByEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submittedByEmail)) {
+    errEl.textContent = 'A valid email is required.';
     errEl.style.display = 'block';
     return;
   }
@@ -187,6 +199,7 @@ document.getElementById('intake-form').addEventListener('submit', async function
         revenue_impact: document.getElementById('revenue-impact').value || undefined,
         urgency_note: document.getElementById('urgency').value.trim() || undefined,
         submitted_by_name: document.getElementById('submitted-by').value.trim() || undefined,
+        submitted_by_email: submittedByEmail,
       }),
     });
     const data = await r.json();
@@ -243,10 +256,15 @@ document.getElementById('intake-form').addEventListener('submit', async function
     const user = await r.json();
     const el = document.getElementById('auth-user');
     if (el) el.textContent = user.name || user.email;
-    // Pre-fill the submitter's name so it's captured even if they don't type it
+    // Pre-fill the submitter's name + email so they're captured even if untouched.
+    // Both inputs remain editable in case the user submits on someone else's behalf.
     const nameInput = document.getElementById('submitted-by');
     if (nameInput && !nameInput.value && (user.name || user.email)) {
       nameInput.value = user.name || user.email;
+    }
+    const emailInput = document.getElementById('submitted-by-email');
+    if (emailInput && !emailInput.value && user.email) {
+      emailInput.value = user.email;
     }
     if (!user.isAdmin) {
       document.querySelectorAll('[data-admin-only]').forEach(n => n.style.display = 'none');
