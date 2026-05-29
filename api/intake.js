@@ -12,7 +12,7 @@ module.exports = async function handler(req, res) {
   const {
     idea, description, source, solution_type, affected_teams,
     attachments, reference_links, time_saved, cost_savings,
-    revenue_impact, urgency_note, submitted_by_name,
+    revenue_impact, urgency_note, submitted_by_name, submitted_by_email,
   } = req.body || {};
 
   if (!idea || !description) {
@@ -30,6 +30,7 @@ module.exports = async function handler(req, res) {
     'Submitted on': today,
     'Notify submitter on next status change?': true,
     'Source base': 'Local',
+    'Triage analyzed by': 'Not yet analyzed',
   };
 
   if (source) fields['Source'] = source;
@@ -43,8 +44,12 @@ module.exports = async function handler(req, res) {
   if (cost_savings != null && cost_savings !== '' && !isNaN(cs)) fields['Cost savings'] = cs;
   if (revenue_impact != null && revenue_impact !== '' && !isNaN(ri)) fields['Revenue impact'] = ri;
   if (urgency_note) fields['Notes'] = urgency_note;
-  if (submitted_by_name) fields['Internal submitter name'] = submitted_by_name;
-  if (user.email) fields['Internal submitter email'] = user.email;
+  // Always capture submitter identity from the session; the form's field
+  // overrides the session-provided name if the user typed something different.
+  const submitterName = submitted_by_name || user.name || user.email;
+  const submitterEmail = submitted_by_email || user.email;
+  if (submitterName) fields['Internal submitter name'] = submitterName;
+  if (submitterEmail) fields['Internal submitter email'] = submitterEmail;
 
   try {
     const r = await fetch(

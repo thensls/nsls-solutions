@@ -26,7 +26,61 @@
     .suggested-builder-row { display: flex; gap: 8px; align-items: flex-end; }
     .suggested-builder-row select { flex: 1; }
     .triage-col .inline-group { grid-template-columns: 1fr; }
+    .shipped-locked .collapsible-section { opacity: 0.5; pointer-events: none; }
+    .shipped-locked .decision-option.locked { opacity: 0.4; cursor: not-allowed; }
+    .shipped-locked #cond-developed { opacity: 1; }
+    .locked-note { font-size: 10px; font-weight: 600; color: #92400E; background: #FEF3C7; padding: 2px 6px; border-radius: 4px; margin-left: 8px; text-transform: none; letter-spacing: 0; }
+    .analysis-md {
+      font-size: 13px; line-height: 1.5; color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px;
+      padding: 10px 12px; background: #FAFBFC;
+      max-height: 360px; overflow-y: auto;
+      white-space: normal; word-break: break-word;
+    }
+    .analysis-md p { margin: 0 0 8px; }
+    .analysis-md p:last-child { margin-bottom: 0; }
+    .analysis-md h1, .analysis-md h2, .analysis-md h3, .analysis-md h4 { font-size: 13px; font-weight: 700; margin: 10px 0 4px; }
+    .analysis-md h1 { font-size: 14px; }
+    .analysis-md ul, .analysis-md ol { margin: 0 0 8px 18px; padding: 0; }
+    .analysis-md li { margin: 2px 0; }
+    .analysis-md code { background: #F3F4F6; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    .analysis-md pre { background: #F3F4F6; padding: 8px 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+    .analysis-md a { color: var(--blue); }
+    .analysis-empty { color: var(--muted); font-style: italic; }
+    .link-picker { border: 1px solid var(--border); border-radius: 7px; padding: 8px; background: #fff; }
+    .link-picker-chips { display: flex; flex-wrap: wrap; gap: 4px; min-height: 22px; margin-bottom: 6px; }
+    .link-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 6px;
+      background: #EEF2FF; border: 1px solid #C7D2FE; color: #3730A3;
+      border-radius: 4px; max-width: 220px;
+    }
+    .link-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .link-chip button {
+      background: transparent; border: 0; cursor: pointer;
+      color: #3730A3; font-size: 14px; line-height: 1; padding: 0 0 0 2px;
+    }
+    .link-picker input.link-search {
+      width: 100%; border: 1px solid var(--border); border-radius: 5px;
+      padding: 5px 8px; font-size: 12px; outline: none;
+    }
+    .link-picker input.link-search:focus { border-color: var(--navy); }
+    .link-options {
+      margin-top: 6px; max-height: 160px; overflow-y: auto;
+      border-top: 1px solid var(--border); padding-top: 4px;
+      display: none;
+    }
+    .link-picker.open .link-options { display: block; }
+    .link-option {
+      font-size: 12px; padding: 4px 6px; cursor: pointer;
+      border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .link-option:hover { background: #F3F4F6; }
+    .link-option.disabled { color: var(--muted); cursor: default; }
+    .link-option.disabled:hover { background: transparent; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
 <body>
 
@@ -68,6 +122,8 @@ const params = new URLSearchParams(location.search);
 const recordId = params.get('id');
 let record = null;
 let builders = [];
+let ideasList = [];
+let analysisEdited = false;
 let queue = JSON.parse(sessionStorage.getItem('triageQueue') || '[]');
 let queueIdx = -1;
 
@@ -108,6 +164,111 @@ function selectOptions(opts, current, placeholder) {
   return html;
 }
 
+function renderMarkdown(src) {
+  if (!src) return '';
+  if (typeof marked === 'undefined') return esc(src).replace(/\n/g,'<br/>');
+  const raw = marked.parse(src, { breaks: true, mangle: false, headerIds: false });
+  return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(raw) : esc(src).replace(/\n/g,'<br/>');
+}
+
+function renderLinkPicker(id, selectedIds, excludeId) {
+  // Selected chips
+  const chips = selectedIds.map(rid => {
+    const found = ideasList.find(r => r.id === rid);
+    const label = found ? (found.fields['Idea'] || '(untitled)') : rid;
+    return `<span class="link-chip" data-id="${esc(rid)}">
+      <span title="${esc(label)}">${esc(label)}</span>
+      <button type="button" aria-label="Remove">&times;</button>
+    </span>`;
+  }).join('');
+  return `<div class="link-picker" id="${esc(id)}" data-exclude="${esc(excludeId||'')}">
+    <div class="link-picker-chips">${chips || ''}</div>
+    <input type="text" class="link-search" placeholder="Search ideas…" autocomplete="off"/>
+    <div class="link-options"></div>
+    <input type="hidden" class="link-values" value="${esc(selectedIds.join(','))}"/>
+  </div>`;
+}
+
+function wireLinkPicker(pickerEl) {
+  const search = pickerEl.querySelector('.link-search');
+  const opts = pickerEl.querySelector('.link-options');
+  const hidden = pickerEl.querySelector('.link-values');
+  const chipsEl = pickerEl.querySelector('.link-picker-chips');
+  const excludeId = pickerEl.dataset.exclude || '';
+
+  function getSelected() {
+    return hidden.value ? hidden.value.split(',').filter(Boolean) : [];
+  }
+  function setSelected(arr) {
+    hidden.value = arr.join(',');
+    chipsEl.innerHTML = arr.map(rid => {
+      const found = ideasList.find(r => r.id === rid);
+      const label = found ? (found.fields['Idea'] || '(untitled)') : rid;
+      return `<span class="link-chip" data-id="${esc(rid)}">
+        <span title="${esc(label)}">${esc(label)}</span>
+        <button type="button" aria-label="Remove">&times;</button>
+      </span>`;
+    }).join('');
+    chipsEl.querySelectorAll('.link-chip button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const chip = btn.closest('.link-chip');
+        const rid = chip.dataset.id;
+        setSelected(getSelected().filter(x => x !== rid));
+      });
+    });
+  }
+  function renderOptions(q) {
+    const selected = new Set(getSelected());
+    const needle = q.trim().toLowerCase();
+    const matches = ideasList
+      .filter(r => r.id !== excludeId)
+      .filter(r => {
+        if (!needle) return true;
+        const title = (r.fields['Idea'] || '').toLowerCase();
+        return title.includes(needle);
+      })
+      .slice(0, 30);
+    if (!matches.length) {
+      opts.innerHTML = '<div class="link-option disabled">No matches</div>';
+      return;
+    }
+    opts.innerHTML = matches.map(r => {
+      const isSel = selected.has(r.id);
+      const title = r.fields['Idea'] || '(untitled)';
+      return `<div class="link-option${isSel?' disabled':''}" data-id="${esc(r.id)}" title="${esc(title)}">
+        ${isSel?'✓ ':''}${esc(title)}
+      </div>`;
+    }).join('');
+    opts.querySelectorAll('.link-option:not(.disabled)').forEach(el => {
+      el.addEventListener('click', () => {
+        const rid = el.dataset.id;
+        const cur = getSelected();
+        if (!cur.includes(rid)) setSelected([...cur, rid]);
+        search.value = '';
+        renderOptions('');
+      });
+    });
+  }
+
+  // Wire existing chips' remove buttons
+  chipsEl.querySelectorAll('.link-chip button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const chip = btn.closest('.link-chip');
+      const rid = chip.dataset.id;
+      setSelected(getSelected().filter(x => x !== rid));
+    });
+  });
+
+  search.addEventListener('focus', () => {
+    pickerEl.classList.add('open');
+    renderOptions(search.value);
+  });
+  search.addEventListener('input', () => renderOptions(search.value));
+  document.addEventListener('click', (e) => {
+    if (!pickerEl.contains(e.target)) pickerEl.classList.remove('open');
+  });
+}
+
 function multiSelectCheckboxes(name, opts, current=[]) {
   return opts.map(o => `
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
@@ -118,25 +279,69 @@ function multiSelectCheckboxes(name, opts, current=[]) {
 
 function renderSubmitterCard(f) {
   const isExt = f['Intake source'] === 'External form';
-  if (isExt) {
-    return `<div class="submitter-card">
-      <div class="name">${esc(f['External submitter name']||'Unknown')}</div>
-      <div class="meta">${esc(f['External submitter role']||'')}${f['External submitter org']?` · ${esc(f['External submitter org'])}`:''}
-        ${f['External submitter email']?`<br><a href="mailto:${esc(f['External submitter email'])}" style="color:var(--blue)">${esc(f['External submitter email'])}</a>`:''}</div>
-      ${f['Related NSLS contact']?`<div class="meta" style="margin-top:6px">NSLS contact: ${esc(f['Related NSLS contact'])}</div>`:''}
-    </div>`;
-  }
+  const nameField = isExt ? 'External submitter name' : 'Internal submitter name';
+  const emailField = isExt ? 'External submitter email' : 'Internal submitter email';
+  const label = isExt ? 'External Submission' : 'Internal Submission';
+  const dateStr = f['Submitted on'] ? new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : '';
+
+  const extraExt = isExt ? `
+    <div class="form-group" style="margin-top:8px;margin-bottom:0">
+      <label style="font-size:11px">Org</label>
+      <input type="text" id="f-submitter-org" class="form-control" value="${esc(f['External submitter org']||'')}"/>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label style="font-size:11px">Role</label>
+      <input type="text" id="f-submitter-role" class="form-control" value="${esc(f['External submitter role']||'')}"/>
+    </div>
+    ${f['Related NSLS contact']?`<div class="meta" style="margin-top:8px">NSLS contact: ${esc(f['Related NSLS contact'])}</div>`:''}
+  ` : '';
+
   return `<div class="submitter-card">
-    <div class="name">Internal Submission</div>
-    <div class="meta">${f['Submitted on']?new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):''}</div>
+    <div class="name">${esc(label)}</div>
+    <div class="meta">${esc(dateStr)}</div>
+    <div class="form-group" style="margin-top:10px;margin-bottom:0">
+      <label style="font-size:11px">Submitter name</label>
+      <input type="text" id="f-submitter-name" class="form-control" data-field="${esc(nameField)}" value="${esc(f[nameField]||'')}" placeholder="Who submitted this?"/>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label style="font-size:11px">Submitter email</label>
+      <input type="email" id="f-submitter-email" class="form-control" data-field="${esc(emailField)}" value="${esc(f[emailField]||'')}" placeholder="name@nsls.org"/>
+    </div>
+    ${extraExt}
   </div>`;
 }
+
+const STATUS_BADGE_CLASS = {
+  'Triage': 'triage', 'Ready': 'ready', 'Picked up': 'building', 'Building': 'building',
+  'Shipped': 'shipped', 'Routed': 'routed', 'Parked': 'parked',
+  'Archived': 'archived', "Won't do": 'wontdo',
+};
+const ALL_STATUSES = ['Triage','Ready','Picked up','Building','Shipped','Routed','Parked',"Won't do",'Archived'];
+const ALL_STAGES = ['Idea','Design Intent','Prototype','Production','Org-Owned'];
+const STAGE_BADGE_CLASS = {
+  'Idea': 'parked', 'Design Intent': 'ready', 'Prototype': 'building',
+  'Production': 'shipped', 'Org-Owned': 'routed',
+};
+const DECISION_STATUS_MAP = {
+  'Move to Ready': 'Ready',
+  'Route to product team': 'Routed',
+  'Mark as developed': 'Shipped',
+  'Park': 'Parked',
+  'Decline': "Won't do",
+};
 
 function renderLayout(f) {
   const score = computeScore(f).toFixed(1);
   const submitterStatus = f['Submitter status'] || 'Acknowledged';
   const template = NOTIF_TEMPLATES[submitterStatus] || '';
-  const decision = f['Decision'] || '';
+  // For already-shipped records (synced or marked locally), pre-select the
+  // matching decision even if the Decision field was never set explicitly.
+  const isShipped = f['Status'] === 'Shipped';
+  const decision = f['Decision'] || (isShipped ? 'Mark as developed' : '');
+  const status = f['Status'] || 'Triage';
+  const statusClass = STATUS_BADGE_CLASS[status] || 'parked';
+  const stage = f['Stage'] || '';
+  const stageClass = STAGE_BADGE_CLASS[stage] || 'parked';
 
   document.getElementById('layout').innerHTML = `
     <!-- LEFT: Raw input -->
@@ -145,7 +350,9 @@ function renderLayout(f) {
       ${renderSubmitterCard(f)}
       <div>
         <div class="idea-heading">${esc(f['Idea']||'Untitled')}</div>
-        <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="badge badge-${statusClass}">${esc(status)}</span>
+          ${stage?`<span class="badge badge-${stageClass}">${esc(stage)}</span>`:''}
           <span class="badge badge-${(f['Intake source']==='External form'?'external':'internal')}">${esc(f['Intake source']||'Manual')}</span>
           <span style="font-size:12px;color:var(--muted)">${f['Submitted on']?new Date(f['Submitted on']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):''}</span>
           <span class="score-chip">${score}</span>
@@ -185,6 +392,22 @@ function renderLayout(f) {
       <div class="col-label">Analysis</div>
 
       <div class="form-group" style="margin-bottom:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="margin-bottom:0">AI analysis</label>
+          <button type="button" id="btn-edit-analysis" class="btn btn-ghost btn-sm">Edit</button>
+        </div>
+        <div id="analysis-view" class="analysis-md">${
+          f['Triage analysis']
+            ? renderMarkdown(f['Triage analysis'])
+            : '<span class="analysis-empty">No analysis yet. Run the triage skill in Claude, paste the output, and save.</span>'
+        }</div>
+        <textarea id="f-triage-analysis" rows="14" style="display:none;margin-top:6px">${esc(f['Triage analysis']||'')}</textarea>
+        <div id="analysis-meta" style="font-size:11px;color:var(--muted);margin-top:6px">
+          ${esc(f['Triage analyzed by'] || 'Not yet analyzed')}${f['Triage analyzed on'] ? ' · ' + new Date(f['Triage analyzed on']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''}
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
         <label>Triage notes <span style="font-size:11px;color:var(--muted);font-weight:400">(private)</span></label>
         <textarea id="f-triage-notes" rows="5">${esc(f['Triage notes']||'')}</textarea>
       </div>
@@ -222,8 +445,44 @@ function renderLayout(f) {
     </div>
 
     <!-- RIGHT: Parameters + Decision -->
-    <div class="triage-col">
-      <div class="col-label">Parameters &amp; Decision</div>
+    <div class="triage-col${isShipped?' shipped-locked':''}">
+      <div class="col-label">Parameters &amp; Decision${isShipped?' <span class="locked-note">Shipped &mdash; only Status and solution links editable</span>':''}</div>
+
+      <!-- Status + Stage (always editable, even on locked records) -->
+      <div class="status-control" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Status</label>
+          <select id="f-status" class="form-control">
+            ${selectOptions(ALL_STATUSES, status)}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>Stage</label>
+          <select id="f-stage" class="form-control">
+            <option value=""${!stage?' selected':''}>— none —</option>
+            ${selectOptions(ALL_STAGES, stage)}
+          </select>
+        </div>
+      </div>
+
+      <!-- Assignment (always editable) -->
+      <div class="assignment-control" style="margin-bottom:16px;padding:10px 12px;background:#F9FAFB;border:1px solid var(--border);border-radius:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Assigned to</label>
+            <input type="text" id="f-assigned-to" class="form-control" value="${esc(f['Assigned to']||'')}" placeholder="Name (free text)"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Assignment task</label>
+            <select id="f-assignment-task" class="form-control">
+              <option value=""${!f['Assignment task']?' selected':''}>— none —</option>
+              ${selectOptions(['Build it','Research it','Spec it','Review it','Pilot it','Other'], f['Assignment task'])}
+            </select>
+          </div>
+        </div>
+        ${f['Assigned on']?`<div class="meta" style="font-size:11px;color:var(--muted)">Last assigned ${new Date(f['Assigned on']).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>`:''}
+        ${f['Assignment history']?`<details style="margin-top:8px"><summary style="font-size:11px;color:var(--muted);cursor:pointer">Assignment history</summary><pre style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;color:var(--text);font-family:inherit">${esc(f['Assignment history'])}</pre></details>`:''}
+      </div>
 
       <!-- Categorization -->
       <div class="collapsible-section">
@@ -252,6 +511,14 @@ function renderLayout(f) {
             <div style="display:flex;flex-wrap:wrap;gap:4px 12px">
               ${multiSelectCheckboxes('affected-teams', ['CS','MEX','Sales','Marketing','Product','Engineering','Finance','Org-wide'], f['Affected teams']||[])}
             </div>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Likely duplicate of</label>
+            ${renderLinkPicker('f-likely-duplicate', (f['Likely duplicate of']||[]).map(x => typeof x === 'string' ? x : x.id), recordId)}
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Related ideas</label>
+            ${renderLinkPicker('f-related-ideas', (f['Related ideas']||[]).map(x => typeof x === 'string' ? x : x.id), recordId)}
           </div>
         </div>
       </div>
@@ -332,13 +599,17 @@ function renderLayout(f) {
       <div>
         <div class="col-label" style="padding-top:0;border-top:none;margin-bottom:8px">Decision</div>
         <div class="decision-group" id="decision-group">
-          ${['Route to product team','Move to Ready','Park','Decline'].map(d => `
-            <label class="decision-option${decision===d?' selected':''}">
-              <input type="radio" name="decision" value="${esc(d)}"${decision===d?' checked':''}/>
+          ${['Route to product team','Move to Ready','Mark as developed','Park','Decline'].map(d => {
+            const isSelected = decision === d;
+            const isLocked = isShipped && d !== 'Mark as developed';
+            return `
+            <label class="decision-option${isSelected?' selected':''}${isLocked?' locked':''}">
+              <input type="radio" name="decision" value="${esc(d)}"${isSelected?' checked':''}${isLocked?' disabled':''}/>
               <div>
                 <div class="option-label">${esc(d)}</div>
               </div>
-            </label>`).join('')}
+            </label>`;
+          }).join('')}
         </div>
       </div>
 
@@ -385,6 +656,26 @@ function renderLayout(f) {
         </div>
       </div>
 
+      <!-- Conditional: Mark as developed -->
+      <div class="conditional-fields${decision==='Mark as developed'?' visible':''}" id="cond-developed">
+        <div class="form-group">
+          <label>Repo link</label>
+          <input type="url" id="f-repo-link" class="form-control" value="${esc(f['Repo link']||'')}" placeholder="https://github.com/..."/>
+        </div>
+        <div class="form-group">
+          <label>Demo link</label>
+          <input type="url" id="f-demo-link" class="form-control" value="${esc(f['Demo link']||'')}" placeholder="https://..."/>
+        </div>
+        <div class="form-group">
+          <label>Docs link</label>
+          <input type="url" id="f-docs-link" class="form-control" value="${esc(f['Docs link']||'')}" placeholder="https://..."/>
+        </div>
+        <div class="form-group">
+          <label>Service URL</label>
+          <input type="url" id="f-service-url" class="form-control" value="${esc(f['Service URL']||'')}" placeholder="https://..."/>
+        </div>
+      </div>
+
       <!-- Conditional: Park -->
       <div class="conditional-fields${decision==='Park'?' visible':''}" id="cond-park">
         <div class="form-group">
@@ -414,8 +705,38 @@ function renderLayout(f) {
       document.querySelectorAll('.decision-option').forEach(el => el.classList.remove('selected'));
       radio.closest('.decision-option').classList.add('selected');
       updateConditionals(radio.value);
+      const mapped = DECISION_STATUS_MAP[radio.value];
+      if (mapped) document.getElementById('f-status').value = mapped;
     });
   });
+
+  // Wire AI analysis edit toggle
+  analysisEdited = false;
+  const editBtn = document.getElementById('btn-edit-analysis');
+  const analysisView = document.getElementById('analysis-view');
+  const analysisTextarea = document.getElementById('f-triage-analysis');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => {
+      const isEditing = analysisTextarea.style.display !== 'none';
+      if (isEditing) {
+        analysisView.innerHTML = analysisTextarea.value
+          ? renderMarkdown(analysisTextarea.value)
+          : '<span class="analysis-empty">No analysis yet. Run the triage skill in Claude, paste the output, and save.</span>';
+        analysisView.style.display = '';
+        analysisTextarea.style.display = 'none';
+        editBtn.textContent = 'Edit';
+      } else {
+        analysisView.style.display = 'none';
+        analysisTextarea.style.display = '';
+        analysisTextarea.focus();
+        editBtn.textContent = 'Preview';
+      }
+    });
+    analysisTextarea.addEventListener('input', () => { analysisEdited = true; });
+  }
+
+  // Wire link pickers (Likely duplicate of, Related ideas)
+  document.querySelectorAll('.link-picker').forEach(wireLinkPicker);
 
   // Update message preview on submitter status change
   document.getElementById('f-submitter-status').addEventListener('change', function() {
@@ -446,6 +767,7 @@ function renderLayout(f) {
 function updateConditionals(decision) {
   document.getElementById('cond-route').classList.toggle('visible', decision === 'Route to product team');
   document.getElementById('cond-ready').classList.toggle('visible', decision === 'Move to Ready');
+  document.getElementById('cond-developed').classList.toggle('visible', decision === 'Mark as developed');
   document.getElementById('cond-park').classList.toggle('visible', decision === 'Park');
   document.getElementById('cond-decline').classList.toggle('visible', decision === 'Decline');
 }
@@ -474,12 +796,53 @@ function collectFields(notifying) {
   const decision = document.querySelector('input[name="decision"]:checked')?.value || null;
   const affectedTeams = [...document.querySelectorAll('input[name="affected-teams"]:checked')].map(c => c.value);
 
-  const DECISION_STATUS_MAP = {
-    'Move to Ready': 'Ready',
-    'Route to product team': 'Routed',
-    'Park': 'Parked',
-    'Decline': "Won't do",
+  // Linked Ideas pickers
+  const readLinkPicker = id => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const v = el.querySelector('.link-values')?.value || '';
+    return v ? v.split(',').filter(Boolean) : [];
   };
+  const likelyDup = readLinkPicker('f-likely-duplicate');
+  const relatedIdeas = readLinkPicker('f-related-ideas');
+
+  // AI analysis: write field; if user edited, mark Skill + Chris edits and stamp today.
+  const analysisText = document.getElementById('f-triage-analysis')?.value || '';
+  const analysisFields = { 'Triage analysis': analysisText };
+  if (analysisEdited) {
+    const prevBy = record.fields['Triage analyzed by'];
+    // Chris (manual) stays manual; Skill-generated or Not yet analyzed → Skill + Chris edits
+    analysisFields['Triage analyzed by'] = prevBy === 'Chris (manual)' ? 'Chris (manual)' : 'Skill + Chris edits';
+    analysisFields['Triage analyzed on'] = new Date().toISOString().split('T')[0];
+  }
+
+  // Submitter fields — input data-field attribute tells us which Airtable field to write to
+  const submitterFields = {};
+  const nameEl = document.getElementById('f-submitter-name');
+  const emailEl = document.getElementById('f-submitter-email');
+  const orgEl = document.getElementById('f-submitter-org');
+  const roleEl = document.getElementById('f-submitter-role');
+  if (nameEl) submitterFields[nameEl.dataset.field] = nameEl.value.trim() || null;
+  if (emailEl) submitterFields[emailEl.dataset.field] = emailEl.value.trim() || null;
+  if (orgEl) submitterFields['External submitter org'] = orgEl.value.trim() || null;
+  if (roleEl) submitterFields['External submitter role'] = roleEl.value.trim() || null;
+
+  // Assignment — if assignee or task changed since load, append a history entry
+  const assignmentFields = {};
+  const newAssignedTo = getVal('f-assigned-to') || '';
+  const newAssignmentTask = getVal('f-assignment-task') || '';
+  const prevAssignedTo = (record.fields['Assigned to'] || '').trim();
+  const prevAssignmentTask = (record.fields['Assignment task'] || '').trim();
+  const assignmentChanged = (newAssignedTo !== prevAssignedTo) || (newAssignmentTask !== prevAssignmentTask);
+  if (assignmentChanged && (newAssignedTo || newAssignmentTask)) {
+    const today = new Date().toISOString().split('T')[0];
+    const entry = `[${today}] ${newAssignedTo || '—'} → ${newAssignmentTask || '—'}`;
+    const existing = record.fields['Assignment history'] || '';
+    assignmentFields['Assignment history'] = existing ? `${entry}\n${existing}` : entry;
+    assignmentFields['Assigned on'] = today;
+  }
+  assignmentFields['Assigned to'] = newAssignedTo || null;
+  assignmentFields['Assignment task'] = newAssignmentTask || null;
 
   const fields = {
     'Triage notes': getVal('f-triage-notes'),
@@ -504,11 +867,14 @@ function collectFields(notifying) {
     'Required skill level': getVal('f-skill-level') || null,
     'Priority override': getVal('f-priority-override') || null,
     'Decision': decision,
+    'Status': getVal('f-status') || record.fields['Status'] || 'Triage',
+    'Stage': getVal('f-stage') || null,
+    'Likely duplicate of': likelyDup && likelyDup.length ? likelyDup : null,
+    'Related ideas': relatedIdeas && relatedIdeas.length ? relatedIdeas : null,
+    ...analysisFields,
+    ...submitterFields,
+    ...assignmentFields,
   };
-
-  if (decision) {
-    fields['Status'] = DECISION_STATUS_MAP[decision] || record.fields['Status'];
-  }
 
   if (decision === 'Route to product team') {
     fields['Routed to'] = getVal('f-routed-to') || null;
@@ -519,6 +885,14 @@ function collectFields(notifying) {
   }
   if (decision === 'Move to Ready') {
     fields['Assignment note'] = getVal('f-assignment-note');
+    const builderId = getVal('f-suggested-builder');
+    fields['Suggested builder'] = builderId ? [builderId] : null;
+  }
+  if (decision === 'Mark as developed') {
+    fields['Repo link'] = getVal('f-repo-link') || null;
+    fields['Demo link'] = getVal('f-demo-link') || null;
+    fields['Docs link'] = getVal('f-docs-link') || null;
+    fields['Service URL'] = getVal('f-service-url') || null;
   }
   if (decision === 'Park') {
     fields['Park reason'] = getVal('f-park-reason');
@@ -581,15 +955,18 @@ document.getElementById('btn-next').addEventListener('click', navigateNext);
 async function init() {
   if (!recordId) { window.location.href = 'index.html'; return; }
   try {
-    const [recRes, bldRes] = await Promise.all([
+    const [recRes, bldRes, ideasRes] = await Promise.all([
       fetch(`/api/idea?id=${recordId}`),
       fetch('/api/builders'),
+      fetch('/api/ideas?limit=200&include_hidden=1'),
     ]);
     const recData = await recRes.json();
     const bldData = await bldRes.json();
+    const ideasData = await ideasRes.json();
     if (!recRes.ok) throw new Error(recData.error?.message || 'Record not found');
     record = recData;
     builders = bldData.records || [];
+    ideasList = ideasRes.ok ? (ideasData.records || []) : [];
     renderLayout(record.fields);
     document.title = `${record.fields['Idea'] || 'Idea'} — Triage`;
   } catch (e) {

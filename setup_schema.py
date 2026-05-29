@@ -174,6 +174,9 @@ else:
         {"name": "External submitter email", "type": "email"},
         {"name": "External submitter org", "type": "singleLineText"},
         {"name": "External submitter role", "type": "singleLineText"},
+        {"name": "Internal submitter name", "type": "singleLineText"},
+        {"name": "Internal submitter email", "type": "email"},
+        {"name": "Internal submitter Slack ID", "type": "singleLineText"},
         {"name": "Related NSLS contact", "type": "singleLineText"},
         {"name": "Source", "type": "singleSelect", "options": {"choices": [
             {"name": "CS team", "color": "orangeLight2"},
@@ -237,6 +240,14 @@ else:
             {"name": "Parking lot", "color": "grayLight2"},
         ]}},
         {"name": "Triage notes", "type": "multilineText"},
+        {"name": "Triage analysis", "type": "multilineText"},
+        {"name": "Triage analyzed on", "type": "date", "options": {"dateFormat": {"name": "iso", "format": "YYYY-MM-DD"}}},
+        {"name": "Triage analyzed by", "type": "singleSelect", "options": {"choices": [
+            {"name": "Skill-generated", "color": "purpleLight2"},
+            {"name": "Skill + Chris edits", "color": "blueLight2"},
+            {"name": "Chris (manual)", "color": "greenLight2"},
+            {"name": "Not yet analyzed", "color": "grayLight2"},
+        ]}},
         {"name": "Clarifying questions", "type": "multilineText"},
         {"name": "Clarification status", "type": "singleSelect", "options": {"choices": [
             {"name": "None needed", "color": "greenLight2"}, {"name": "Asked", "color": "yellowLight2"},
@@ -285,6 +296,14 @@ else:
                 "type": "multipleRecordLinks",
                 "options": {"linkedTableId": BUILDERS_TABLE_ID},
             })
+
+    # Self-links for triage workflow (Ideas → Ideas)
+    for fname in ["Likely duplicate of", "Related ideas"]:
+        add_field(IDEAS_TABLE_ID, {
+            "name": fname,
+            "type": "multipleRecordLinks",
+            "options": {"linkedTableId": IDEAS_TABLE_ID},
+        })
 
     # Score formula
     score_formula = (

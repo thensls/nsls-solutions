@@ -49,6 +49,7 @@
       <select id="filter-status" class="form-control" style="width:160px">
         <option value="Triage">Triage</option>
         <option value="Ready">Ready</option>
+        <option value="Shipped">Shipped</option>
         <option value="Parked">Parked</option>
         <option value="">All ideas</option>
       </select>
@@ -77,10 +78,40 @@ function statusBadge(status) {
   return `<span class="badge badge-${cls}">${esc(status || '—')}</span>`;
 }
 
+function stageBadge(stage) {
+  if (!stage) return '';
+  const map = {
+    'Idea': 'parked', 'Design Intent': 'ready', 'Prototype': 'building',
+    'Production': 'shipped', 'Org-Owned': 'routed',
+  };
+  const cls = map[stage] || 'parked';
+  return `<span class="badge badge-${cls}" style="margin-left:4px">${esc(stage)}</span>`;
+}
+
 function sourceBadge(src) {
   if (src === 'External form') return '<span class="badge badge-external">External</span>';
   if (src === 'Internal form') return '<span class="badge badge-internal">Internal</span>';
   return `<span class="badge" style="background:#F3F4F6;color:#374151">${esc(src || 'Manual')}</span>`;
+}
+
+function submitterText(f) {
+  return f['Intake source'] === 'External form'
+    ? ((f['External submitter name'] || f['External submitter email'] || '—') +
+       (f['External submitter org'] ? ` · ${f['External submitter org']}` : ''))
+    : (f['Internal submitter name'] || f['Internal submitter email'] || '—');
+}
+
+function solutionLinks(f) {
+  const links = [
+    ['Repo', f['Repo link']],
+    ['Demo', f['Demo link']],
+    ['Docs', f['Docs link']],
+    ['Service', f['Service URL']],
+  ].filter(([, url]) => url);
+  if (!links.length) return '';
+  return `<div class="solution-links">${links.map(([label, url]) =>
+    `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="solution-link" title="${esc(url)}">${label} ↗</a>`
+  ).join('')}</div>`;
 }
 
 function relativeDate(iso) {
@@ -120,9 +151,12 @@ let searchQuery = '';
 
 const SORT_FNS = {
   idea: (a, b) => (a.fields['Idea'] || '').localeCompare(b.fields['Idea'] || ''),
+  submitter: (a, b) => submitterText(a.fields).localeCompare(submitterText(b.fields)),
   source: (a, b) => (a.fields['Intake source'] || '').localeCompare(b.fields['Intake source'] || ''),
   status: (a, b) => (a.fields['Status'] || '').localeCompare(b.fields['Status'] || ''),
   type: (a, b) => (a.fields['Solution type'] || '').localeCompare(b.fields['Solution type'] || ''),
+  assignee: (a, b) => (a.fields['Assigned to'] || '').localeCompare(b.fields['Assigned to'] || ''),
+  task: (a, b) => (a.fields['Assignment task'] || '').localeCompare(b.fields['Assignment task'] || ''),
   submitted: (a, b) => (a.fields['Submitted on'] || '').localeCompare(b.fields['Submitted on'] || ''),
   score: (a, b) => computeScore(a.fields) - computeScore(b.fields),
 };
@@ -176,7 +210,8 @@ function render() {
         f['Idea'], f['Description'],
         f['Internal submitter name'], f['Internal submitter email'],
         f['External submitter name'], f['External submitter email'], f['External submitter org'],
-        f['Solution type'], f['Status'], f['Source'], f['Notes'],
+        f['Solution type'], f['Status'], f['Stage'], f['Source'], f['Notes'],
+        f['Assigned to'], f['Assignment task'],
       ].some(v => v && String(v).toLowerCase().includes(q));
     });
   }
@@ -207,10 +242,7 @@ function render() {
   const rows = records.map((rec) => {
     const f = rec.fields;
     const score = computeScore(f).toFixed(1);
-    const submitter = f['Intake source'] === 'External form'
-      ? ((f['External submitter name'] || f['External submitter email'] || '—') +
-         (f['External submitter org'] ? ` · ${f['External submitter org']}` : ''))
-      : (f['Internal submitter name'] || f['Internal submitter email'] || '—');
+    const submitter = submitterText(f);
     const descPreview = truncate(f['Description'], 140);
 
     const isMirrored = f['Source base'] === 'NSLS Automation Tracker';
@@ -221,12 +253,15 @@ function render() {
     return `<tr onclick="navigate(this.dataset.id)" data-id="${esc(rec.id)}">
       <td>
         <div class="idea-title">${esc(f['Idea'] || 'Untitled')}${mirroredBadge}${ageWarning(f['Submitted on'], f['Submitter status'])}</div>
-        <div class="idea-submitter">${esc(submitter)}</div>
         ${descPreview ? `<div class="idea-description-preview">${esc(descPreview)}</div>` : ''}
+        ${solutionLinks(f)}
       </td>
+      <td class="submitter-cell">${esc(submitter)}</td>
       <td>${sourceBadge(f['Intake source'])}</td>
-      <td>${statusBadge(f['Status'])}</td>
+      <td style="white-space:nowrap">${statusBadge(f['Status'])}${stageBadge(f['Stage'])}</td>
       <td>${f['Solution type'] ? `<span class="chip">${esc(f['Solution type'])}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="submitter-cell">${f['Assigned to'] ? esc(f['Assigned to']) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${f['Assignment task'] ? `<span class="chip">${esc(f['Assignment task'])}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td class="date-cell">${relativeDate(f['Submitted on'])}</td>
       <td><span class="score-chip">${score}</span></td>
       <td onclick="event.stopPropagation()">
@@ -240,9 +275,12 @@ function render() {
       <thead>
         <tr>
           <th class="sortable" onclick="setSort('idea')">Idea${arrow('idea')}</th>
+          <th class="sortable" onclick="setSort('submitter')">Submitter${arrow('submitter')}</th>
           <th class="sortable" onclick="setSort('source')">Source${arrow('source')}</th>
           <th class="sortable" onclick="setSort('status')">Status${arrow('status')}</th>
           <th class="sortable" onclick="setSort('type')">Type${arrow('type')}</th>
+          <th class="sortable" onclick="setSort('assignee')">Assigned to${arrow('assignee')}</th>
+          <th class="sortable" onclick="setSort('task')">Task${arrow('task')}</th>
           <th class="sortable" onclick="setSort('submitted')">Submitted${arrow('submitted')}</th>
           <th class="sortable" onclick="setSort('score')">Score${arrow('score')}</th>
           <th></th>
@@ -307,6 +345,15 @@ function showToast(msg) {
 
 function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Only allow http(s) URLs into href attributes; blocks javascript:/data: schemes.
+function safeUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url, window.location.origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : '';
+  } catch { return ''; }
 }
 
 function truncate(s, n) {
