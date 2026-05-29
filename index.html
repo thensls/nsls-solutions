@@ -110,7 +110,7 @@ function solutionLinks(f) {
   ].filter(([, url]) => url);
   if (!links.length) return '';
   return `<div class="solution-links">${links.map(([label, url]) =>
-    `<a href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="solution-link" title="${esc(url)}">${label} ↗</a>`
+    `<a href="${esc(safeUrl(url))}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="solution-link" title="${esc(url)}">${label} ↗</a>`
   ).join('')}</div>`;
 }
 
@@ -345,6 +345,15 @@ function showToast(msg) {
 
 function esc(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Only allow http(s) URLs into href attributes; blocks javascript:/data: schemes.
+function safeUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url, window.location.origin);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? url : '';
+  } catch { return ''; }
 }
 
 function truncate(s, n) {
